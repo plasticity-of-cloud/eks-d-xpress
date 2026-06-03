@@ -1,0 +1,179 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      k8s_versions:
+        description: 'Kubernetes versions to build (comma-separated)'
+        required: true
+        default: '1.35,1.36'
+      build_ami:
+        description: 'Build AMIs after ecr-credential-provider'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  id-token: write  # OIDC for AWS
+
+jobs:
+  # ── Step 1: Build ecr-credential-provider natively per arch ──────────────
+  build-ecr-credential-provider:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goarch: amd64
+          - runner: ubuntu-24.04-arm
+            goarch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Build for each k8s version
+        run: |
+          VERSIONS="${{ github.event.inputs.k8s_versions || '1.35,1.36' }}"
+          IFS=',' read -ra VERSIONS <<< "$VERSIONS"
+          for K8S_VERSION in "${VERSIONS[@]}"; do
+            K8S_VERSION="${K8S_VERSION// /}"
+            TAG=$(curl -sf "https://api.github.com/repos/kubernetes/cloud-provider-aws/tags?per_page=100" \
+              | jq -r --arg v "v${K8S_VERSION}." '[.[] | select(.name | startswith($v))] | first | .name')
+            [ -z "$TAG" ] || [ "$TAG" = "null" ] && { echo "ERROR: no tag for v${K8S_VERSION}.*" >&2; exit 1; }
+            echo "Building ecr-credential-provider ${TAG} for ${{ matrix.goarch }}"
+            git clone --depth 1 --branch "${TAG}" \
+              https://github.com/kubernetes/cloud-provider-aws.git /tmp/cpa
+            cd /tmp/cpa
+            go build -o "${{ github.workspace }}/ecr-credential-provider-${K8S_VERSION}-${{ matrix.goarch }}" \
+              ./cmd/ecr-credential-provider
+            cd / && rm -rf /tmp/cpa
+            echo "✓ ecr-credential-provider-${K8S_VERSION}-${{ matrix.goarch }}"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ecr-credential-provider-${{ matrix.goarch }}
+          path: ecr-credential-provider-*
+          retention-days: 1
+
+  # ── Step 2: Build CDK bundle and synthesize CloudFormation template ───────
+  build-cdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: '21'
+
+      - name: Install CDK
+        run: npm install -g aws-cdk
+
+      - name: Synthesize CloudFormation template
+        run: |
+          cd cdk
+          mvn -e -q compile
+          cdk synth EksDxSharedInfraStack --quiet
+          cp cdk.out/EksDxSharedInfraStack.template.json ../EksDxSharedInfraStack.template.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cdk-template
+          path: EksDxSharedInfraStack.template.json
+          retention-days: 1
+
+  # ── Step 3: Build AMIs (Packer) ───────────────────────────────────────────
+  build-ami:
+    needs: build-ecr-credential-provider
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_ami }}
+    strategy:
+      matrix:
+        k8s_version: ['1.35', '1.36']
+        arch: ['arm64', 'x86_64']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ecr-credential-provider artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: ami-builder/files/
+
+      - name: Stage binary for this arch
+        run: |
+          GOARCH=${{ matrix.arch == 'arm64' && 'arm64' || 'amd64' }}
+          cp "ami-builder/files/ecr-credential-provider-${{ matrix.k8s_version }}-${GOARCH}" \
+             "ami-builder/files/ecr-credential-provider-${GOARCH}"
+          chmod +x "ami-builder/files/ecr-credential-provider-${GOARCH}"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PACKER_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install Packer
+        run: |
+          VERSION=$(grep '^packer ' .tool-versions | awk '{print $2}')
+          curl -fsSL "https://releases.hashicorp.com/packer/${VERSION}/packer_${VERSION}_linux_amd64.zip" \
+            -o /tmp/packer.zip
+          unzip -o /tmp/packer.zip -d /tmp && sudo mv /tmp/packer /usr/local/bin/packer
+
+      - name: Build AMI
+        run: |
+          packer init ami-builder/eks-dx.pkr.hcl
+          packer build \
+            -only="amazon-ebs.${{ matrix.arch }}" \
+            -var "aws_region=${{ secrets.AWS_REGION }}" \
+            -var "kubernetes_version=${{ matrix.k8s_version }}" \
+            -var "ami_version=$(date +%Y%m%d-%H%M)" \
+            ami-builder/eks-dx.pkr.hcl
+          cp ami-builder/ami-manifest-entries.json \
+             ami-manifest-${{ matrix.k8s_version }}-${{ matrix.arch }}.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ami-manifest-${{ matrix.k8s_version }}-${{ matrix.arch }}
+          path: ami-manifest-${{ matrix.k8s_version }}-${{ matrix.arch }}.json
+          retention-days: 1
+
+  # ── Step 4: Create GitHub release with all artifacts ─────────────────────
+  release:
+    needs: [build-ami, build-cdk]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Merge AMI manifest entries
+        run: |
+          python3 - <<'EOF'
+          import json, glob, collections
+
+          entries = []
+          for f in glob.glob("ami-manifest-*.json"):
+              entries.extend(json.load(open(f)))
+
+          # Build nested structure: {k8s_version: {arch: {region: ami_id}}}
+          manifest = collections.defaultdict(lambda: collections.defaultdict(dict))
+          for e in entries:
+              manifest[e["kubernetes_version"]][e["arch"]][e["region"]] = e["ami_id"]
+
+          json.dump(manifest, open("ami-manifest.json", "w"), indent=2)
+          print(json.dumps(manifest, indent=2))
+          EOF
+
+      - name: Generate checksums
+        run: sha256sum ecr-credential-provider-* EksDxSharedInfraStack.template.json ami-manifest.json > checksums.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ecr-credential-provider-*
+            EksDxSharedInfraStack.template.json
+            ami-manifest.json
+            checksums.txt
+          generate_release_notes: true

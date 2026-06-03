@@ -1,0 +1,65 @@
+# EKS-DX Setup Review — Bug List
+# Date: 2026-05-12
+
+[HIGH] 00-configure-containerd.sh — stale hardcoded version defaults
+  EKSD_VERSION defaults to "1-33", EKSD_RELEASE to "19"; project is on 1.35.
+  If /opt/eks-d/version.env is absent, the wrong pause image is configured silently.
+  Fix: source /opt/eks-d/version.env and fail explicitly if missing.
+
+[HIGH] 00-configure-containerd.sh — duplicate manifest download
+  Downloads eks-d-release.yaml independently with its own (stale) version vars.
+  06-install-eks-d.sh already downloads the same manifest to /tmp/eks-d-release.yaml.
+  Fix: share the manifest; 00 should run after 06 or reuse the file 06 produces.
+
+[MEDIUM] 11-install-karpenter.sh — wrong path for versions.env
+  Sources /opt/eks-d/versions.env which does not exist.
+  Actual file is /opt/eks-d/manifests/eks-d-versions.env.
+  Result: KARPENTER_VERSION silently falls back to hardcoded "1.10.0".
+  Fix: correct the source path.
+
+[MEDIUM] ami-builder/scripts/install.sh — EBS CSI image version mismatch
+  Pre-pulls public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.53.0
+  but 10-install-ebs-csi.sh installs v1.38.0.
+  The pre-pulled image is never used; v1.38.0 is pulled at boot time.
+  Fix: align both to the same version.
+
+[MEDIUM] 02-install-docker.sh — Docker not needed; fragile containerd dependency
+  Docker is installed only so containerd arrives as a side-effect.
+  Kubernetes uses containerd directly; Docker is unused and adds ~200 MB.
+  Fix: install containerd directly via `dnf install containerd`.
+
+[MEDIUM] 03-install-kubectl.sh — installs upstream kubectl, not EKS-D kubectl
+  Fetches the latest stable version from dl.k8s.io/release/stable.txt.
+  06-install-eks-d.sh already installs the EKS-D kubectl binary.
+  Fix: drop 03 and let 06 own kubectl, or have 03 reuse the EKS-D binary.
+
+[MEDIUM] 04-install-helm.sh — unpinned curl-pipe-bash install
+  `curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash`
+  Not pinned to a version; breaks reproducibility and is a supply-chain risk.
+  Fix: pin to a specific Helm release (e.g. v3.17.x) and verify checksum.
+
+[MEDIUM] workstation-boot.sh — metrics server not installed
+  install-all.sh installs metrics-server (step 13) but workstation-boot.sh omits it.
+  Clusters booted from AMI will have no metrics-server.
+  Fix: add `bash 12-install-metrics-server.sh` to workstation-boot.sh.
+
+[LOW] 08-install-cloud-provider.sh — no cached chart fallback
+  Always runs `helm repo add` + `helm repo update` even on AMI-booted instances.
+  Every other Helm install checks /opt/eks-d/charts/ first.
+  Fix: check for pre-pulled chart tarball before hitting the network.
+
+[LOW] install-all.sh — broken step counter
+  Denominator changes from /11 → /12 → /15 mid-run.
+  Fix: use a consistent total (15) throughout.
+
+[LOW] install.sh — dead legacy code
+  Hardcoded EKS-D v1.28.2, amd64-only, uses deprecated in-tree cloud-provider.
+  Never called by any other script.
+  Fix: delete the file.
+
+# Naming confusion (not a bug, but a maintenance hazard)
+  Three env files with similar names and overlapping content:
+    /opt/eks-d/version.env              (written by ami-builder/scripts/install.sh)
+    /opt/eks-d/manifests/eks-d-versions.env  (written by discover-eks-d.sh)
+    /opt/eks-d/versions.env             (referenced by 11-install-karpenter.sh — does not exist)
+  Recommend consolidating to a single canonical file.
