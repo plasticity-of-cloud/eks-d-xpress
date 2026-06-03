@@ -21,39 +21,9 @@ permissions:
 jobs:
   # ── Step 1: Build ecr-credential-provider natively per arch ──────────────
   build-ecr-credential-provider:
-    strategy:
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            goarch: amd64
-          - runner: ubuntu-24.04-arm
-            goarch: arm64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - name: Build for each k8s version
-        run: |
-          VERSIONS="${{ github.event.inputs.k8s_versions || '1.35,1.36' }}"
-          IFS=',' read -ra VERSIONS <<< "$VERSIONS"
-          for K8S_VERSION in "${VERSIONS[@]}"; do
-            K8S_VERSION="${K8S_VERSION// /}"
-            TAG=$(curl -sf "https://api.github.com/repos/kubernetes/cloud-provider-aws/tags?per_page=100" \
-              | jq -r --arg v "v${K8S_VERSION}." '[.[] | select(.name | startswith($v))] | first | .name')
-            [ -z "$TAG" ] || [ "$TAG" = "null" ] && { echo "ERROR: no tag for v${K8S_VERSION}.*" >&2; exit 1; }
-            echo "Building ecr-credential-provider ${TAG} for ${{ matrix.goarch }}"
-            git clone --depth 1 --branch "${TAG}" \
-              https://github.com/kubernetes/cloud-provider-aws.git /tmp/cpa
-            cd /tmp/cpa
-            go build -o "${{ github.workspace }}/ecr-credential-provider-${K8S_VERSION}-${{ matrix.goarch }}" \
-              ./cmd/ecr-credential-provider
-            cd / && rm -rf /tmp/cpa
-            echo "✓ ecr-credential-provider-${K8S_VERSION}-${{ matrix.goarch }}"
-          done
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ecr-credential-provider-${{ matrix.goarch }}
-          path: ecr-credential-provider-*
-          retention-days: 1
+    uses: ./.github/workflows/build-ecr-credential-provider.yml
+    with:
+      k8s_versions: ${{ inputs.k8s_versions || '1.35,1.36' }}
 
   # ── Step 2: Build CDK bundle and synthesize CloudFormation template ───────
   build-cdk:
