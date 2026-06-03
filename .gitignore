@@ -1,0 +1,4 @@
+packer-manifest.json
+ami-manifest-entries.json
+ami-manifest-*.json
+packer-build-*.log
