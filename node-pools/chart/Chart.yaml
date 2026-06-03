@@ -1,0 +1,5 @@
+apiVersion: v2
+name: eks-d-karpenter
+description: Karpenter NodePool and EC2NodeClass for EKS-D-Xpress workstation
+type: application
+version: 0.1.0

@@ -1,0 +1,35 @@
+# Cluster identity
+clusterName: ""
+tenantId: ""
+awsRegion: "us-east-1"
+
+# EKS-Optimized AMI for arm64 + k8s 1.35
+# Discovered at runtime via SSM based on nodeVariant
+amiId: ""
+
+# Node OS/accelerator variant — controls SSM path and userdata format.
+# Values: al2023 | al2023-gpu | al2023-neuron | bottlerocket | bottlerocket-gpu | bottlerocket-neuron
+nodeVariant: "al2023"
+
+# Discovered at runtime by configure-nodepools.sh
+instanceProfile: ""
+subnetId: ""
+securityGroupId: ""
+
+# NodeConfig for nodeadm (AL2023) or Bottlerocket TOML
+nodeConfig:
+  apiServerEndpoint: ""
+  certificateAuthority: ""
+  serviceCidr: "10.96.0.0/12"
+  clusterDnsIp: "10.96.0.10"
+
+# NodePool settings
+# instanceCategories and instanceGenerationGt are derived in nodepool.yaml
+# from nodeVariant (standard -> m/c/r gen>5, gpu -> p/g gen>2, neuron -> inf/trn gen>0)
+nodePool:
+  capacityType: "spot"
+  arch: "arm64"
+  instanceGenerationGt: "5"
+  cpuLimit: "100"
+  memoryLimit: "100Gi"
+  consolidateAfter: "1m"

@@ -1,0 +1,18 @@
+[Unit]
+Description=EKS-DX Cluster Bootstrap
+After=network-online.target cloud-final.service
+Wants=network-online.target
+ConditionPathExists=!/opt/eks-d/.installation_complete
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+Environment=HOME=/root
+WorkingDirectory=/opt/eks-d-setup
+ExecStart=/bin/bash /opt/eks-d-setup/workstation-boot.sh
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target
