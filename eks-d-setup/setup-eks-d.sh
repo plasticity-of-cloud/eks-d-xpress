@@ -86,6 +86,17 @@ update_progress "kubeadm-init" "Initialising control plane" 20
 bash "${SCRIPT_DIR}/07-install-eks-d.sh"
 update_progress "kubeadm-done" "Control plane ready" 40
 
+# Make kubeconfig available to the login user immediately after kubeadm init
+# (systemd runs this as root; without this ec2-user is locked out if any later step fails)
+_LOGIN_USER="ec2-user"
+_LOGIN_HOME=$(getent passwd "${_LOGIN_USER}" | cut -d: -f6)
+if [ -n "${_LOGIN_HOME}" ] && [ -f /etc/kubernetes/admin.conf ]; then
+  mkdir -p "${_LOGIN_HOME}/.kube"
+  cp /etc/kubernetes/admin.conf "${_LOGIN_HOME}/.kube/config"
+  chown -R "${_LOGIN_USER}:${_LOGIN_USER}" "${_LOGIN_HOME}/.kube"
+  echo "✓ kubeconfig copied to ${_LOGIN_USER}"
+fi
+
 # Step 4: AWS VPC CNI
 echo "Step 4/10: Installing AWS VPC CNI..."
 update_progress "provisioning" "Installing VPC CNI" 50
