@@ -3,7 +3,7 @@
 # Source this file from workstation-boot.sh or any boot script.
 #
 # Requires: TENANT_ID, AWS_REGION (from cluster.env)
-# Optional: EKS_DX_TENANTS_TABLE (defaults to eks-dx-tenants)
+# Optional: EKS_DX_TENANTS_TABLE (defaults to eks-d-xpress-tenants)
 
 EKS_DX_TENANTS_TABLE="${EKS_DX_TENANTS_TABLE:-eks-d-xpress-tenants}"
 
