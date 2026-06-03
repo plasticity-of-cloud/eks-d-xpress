@@ -12,10 +12,12 @@ all: ami
 
 ami: stage build clean-sgs
 
+_ONLY = $(if $(filter arm64,$(ARCH)),-only=amazon-ebs.arm64,$(if $(filter x86_64,$(ARCH)),-only=amazon-ebs.x86_64,))
+
 build: packer-init
 	PACKER_LOG=1 PACKER_LOG_PATH="$(ROOT)/packer-build-$(AMI_VERSION).log" \
 	packer build \
-	  $(shell case '$(ARCH)' in arm64) echo -only=amazon-ebs.arm64;; x86_64) echo -only=amazon-ebs.x86_64;; esac) \
+	  $(_ONLY) \
 	  -var "aws_region=$(AWS_REGION)" \
 	  -var "kubernetes_version=$(KUBERNETES_VERSION)" \
 	  -var "ami_version=$(AMI_VERSION)" \
