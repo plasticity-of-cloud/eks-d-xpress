@@ -66,6 +66,20 @@ jobs:
           cp ami-builder/ami-manifest-entries.json \
              ami-manifest-${{ matrix.k8s_version }}-${{ matrix.arch }}.json
 
+      - name: Sign AMI
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION }}
+        run: |
+          AMI_VERSION=$(date +%Y%m%d-%H%M)
+          make -C ami-builder sign AWS_REGION="$AWS_REGION" AMI_VERSION="$AMI_VERSION"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.k8s_version }}-${{ matrix.arch }}
+          path: ami-builder/sbom-${{ matrix.arch }}-*.spdx.json
+          retention-days: 90
+
       - uses: actions/upload-artifact@v4
         with:
           name: ami-manifest-${{ matrix.k8s_version }}-${{ matrix.arch }}
@@ -101,12 +115,13 @@ jobs:
           EOF
 
       - name: Generate checksums
-        run: sha256sum ecr-credential-provider-* ami-manifest.json > checksums.txt
+        run: sha256sum ecr-credential-provider-* ami-manifest.json sbom-*.spdx.json > checksums.txt
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             ecr-credential-provider-*
             ami-manifest.json
+            sbom-*.spdx.json
             checksums.txt
           generate_release_notes: true

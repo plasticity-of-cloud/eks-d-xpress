@@ -6,11 +6,11 @@ ARCH               ?= arm64
 DIR  := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ROOT := $(abspath $(DIR)/..)
 
-.PHONY: all ami build stage packer-init ensure-packer clean-sgs
+.PHONY: all ami build stage packer-init ensure-packer clean-sgs sign
 
 all: ami
 
-ami: stage build clean-sgs
+ami: stage build clean-sgs sign
 
 _ONLY = $(if $(filter arm64,$(ARCH)),-only=amazon-ebs.arm64,$(if $(filter x86_64,$(ARCH)),-only=amazon-ebs.x86_64,))
 
@@ -58,3 +58,6 @@ clean-sgs:
 	  echo "Deleting stale SG: $$sg"; \
 	  aws ec2 delete-security-group --group-id "$$sg" --region "$(AWS_REGION)" 2>/dev/null || true; \
 	done
+
+sign:
+	AMI_VERSION=$(AMI_VERSION) AWS_REGION=$(AWS_REGION) bash "$(DIR)scripts/sign-ami.sh"

@@ -172,6 +172,21 @@ build {
     ]
   }
 
+  # Generate SBOM of the installed filesystem before the AMI is snapshotted
+  provisioner "shell" {
+    inline = [
+      "curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sudo sh -s -- -b /usr/local/bin",
+      "sudo syft dir:/ --exclude '/proc' --exclude '/sys' --exclude '/dev' --exclude '/tmp' -o spdx-json > /tmp/sbom.spdx.json",
+      "echo '✓ SBOM generated'"
+    ]
+  }
+
+  provisioner "file" {
+    source      = "/tmp/sbom.spdx.json"
+    destination = "${path.root}/sbom-${source.name}-${var.ami_version}.spdx.json"
+    direction   = "download"
+  }
+
   post-processor "manifest" {
     output     = "packer-manifest.json"
     strip_path = true
