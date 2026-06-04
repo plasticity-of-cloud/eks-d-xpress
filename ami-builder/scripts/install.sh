@@ -146,6 +146,7 @@ sudo chmod +x /opt/eks-d-setup/*.sh
 echo "==> Pre-pulling cert-manager chart..."
 helm repo add jetstack https://charts.jetstack.io --force-update
 helm pull jetstack/cert-manager --version "v1.17.1" --destination /tmp || true
+sudo mv /tmp/cert-manager-*.tgz /opt/eks-d/charts/ 2>/dev/null || true
 
 echo "==> Pre-pulling EKS-DX Pod Identity charts..."
 helm pull oci://ghcr.io/plasticity-of-cloud/helm/eks-dx-pod-identity-webhook --version "${EKS_DX_CONTROL_PLANE_VERSION}" --destination /tmp || true
@@ -309,6 +310,19 @@ PYEOF
     --set clusterName=build --set region=us-east-1 2>/dev/null | \
     python3 /tmp/extract_images_cw.py | sort -u | while read img; do
       cache_img=$(echo "$img" | sed "s|public.ecr.aws/|${PUBLIC_ECR_CACHE}/|")
+      echo "  Pulling: $cache_img"
+      sudo ctr -n k8s.io images pull --user "${ECR_CTR_USER}" "$cache_img" || true
+    done
+fi
+
+# Render cert-manager chart and extract images (quay.io — pulled through ECR pull-through cache)
+echo "==> Extracting and pulling images from cert-manager chart..."
+CERT_MANAGER_CHART=$(ls /opt/eks-d/charts/cert-manager-*.tgz 2>/dev/null | head -1)
+QUAY_CACHE="${ECR_REGISTRY}/quay-io"
+if [ -n "$CERT_MANAGER_CHART" ]; then
+  helm template cert-manager "$CERT_MANAGER_CHART" --set crds.enabled=true 2>/dev/null | \
+    grep -oP 'image:\s*\K[^\s]+' | grep 'quay\.io' | sort -u | while read img; do
+      cache_img=$(echo "$img" | sed "s|quay.io/|${QUAY_CACHE}/|")
       echo "  Pulling: $cache_img"
       sudo ctr -n k8s.io images pull --user "${ECR_CTR_USER}" "$cache_img" || true
     done
