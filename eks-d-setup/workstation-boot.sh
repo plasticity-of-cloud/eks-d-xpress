@@ -11,6 +11,10 @@ set -eo pipefail
 BOOT_LOG="/var/log/eks-dx-boot.log"
 exec > >(tee -a "$BOOT_LOG") 2>&1
 
+# EBS warmup — pre-fault the first 256MB of the root volume from snapshot in the
+# background so EBS blocks are hot before kubeadm starts (~30s head start).
+dd if=/dev/xvda of=/dev/null bs=1M count=256 iflag=direct 2>/dev/null &
+
 # Wait for IMDS to be reachable (ENI must be fully attached)
 echo "Waiting for IMDS..."
 for i in $(seq 1 30); do

@@ -187,6 +187,20 @@ sudo curl -sL "https://raw.githubusercontent.com/aws/amazon-vpc-cni-k8s/v1.20.4/
   -o /opt/eks-d/manifests/aws-vpc-cni.yaml
 # Note: CoreDNS is installed automatically by kubeadm init — no separate manifest needed
 
+# Pre-bake CNI binaries from the VPC CNI init container image so the init
+# container finds them on first boot and skips extraction (~20s saving).
+echo "==> Pre-baking CNI binaries from aws-k8s-cni-init..."
+CNI_INIT_IMG=$(grep "image:" /opt/eks-d/manifests/aws-vpc-cni.yaml | grep "cni-init" | head -1 | awk '{print $2}')
+if [ -n "$CNI_INIT_IMG" ]; then
+  sudo mkdir -p /opt/cni/bin
+  docker create --name cni-prebake "$CNI_INIT_IMG" 2>/dev/null && \
+    sudo docker cp cni-prebake:/opt/cni/bin/. /opt/cni/bin/ && \
+    docker rm cni-prebake || docker rm -f cni-prebake 2>/dev/null || true
+  echo "✓ CNI binaries baked to /opt/cni/bin ($(ls /opt/cni/bin | wc -l) files)"
+else
+  echo "Warning: could not determine CNI init image — /opt/cni/bin not pre-baked"
+fi
+
 # Pre-pull container images by inspecting charts and manifests
 echo "==> Discovering and pre-pulling container images..."
 sudo systemctl start containerd
