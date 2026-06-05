@@ -12,9 +12,8 @@ fi
 # Get cluster name and AWS variables from persisted identity
 [ -f /opt/eks-d/cluster.env ] && source /opt/eks-d/cluster.env
 
-if [ -z "$CLUSTER_NAME" ] || [ -z "$INSTANCE_ID" ] || [ -z "$AWS_REGION" ]; then
+if [ -z "$CLUSTER_NAME" ] || [ -z "$AWS_REGION" ]; then
   echo "Error: Required variables not found in /opt/eks-d/cluster.env"
-  echo "Run install-all.sh to calculate these variables first"
   exit 1
 fi
 
@@ -27,16 +26,7 @@ helm upgrade --install aws-ebs-csi-driver "$CHART" \
   --set node.enableWindows=false \
   --wait
 
-# Tag the current instance for EBS CSI cluster scoping
-echo "Tagging instance for EBS CSI cluster scoping..."
-if [ -n "$INSTANCE_ID" ] && [ "$INSTANCE_ID" != "" ]; then
-  aws ec2 create-tags --resources "$INSTANCE_ID" --tags Key="ebs.csi.aws.com/cluster-name",Value="$CLUSTER_NAME" || {
-    echo "Warning: Failed to tag instance $INSTANCE_ID, but EBS CSI driver will still function"
-  }
-  echo "✓ Instance $INSTANCE_ID tagged with cluster name: $CLUSTER_NAME"
-else
-  echo "Warning: Instance ID not available, skipping instance tagging"
-fi
+# Instance is already tagged with ebs.csi.aws.com/cluster-name by TenantEc2Service at launch time.
 
 echo "Creating default storage class..."
 cat <<EOF | kubectl apply -f -

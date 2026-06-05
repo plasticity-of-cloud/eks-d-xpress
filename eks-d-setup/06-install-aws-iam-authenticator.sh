@@ -55,11 +55,13 @@ if [ -z "${TENANT_ID}" ] || [ -z "${CLUSTER_NAME}" ]; then
   exit 1
 fi
 
-if [ -z "$AWS_ACCOUNT_ID" ] || [ -z "$AWS_REGION" ] || [ -z "$NODE_ROLE_ARN" ]; then
+if [ -z "$AWS_ACCOUNT_ID" ] || [ -z "$AWS_REGION" ]; then
   echo "Error: AWS environment variables not found in /opt/eks-d/cluster.env"
-  echo "Run install-all.sh to calculate these variables first"
   exit 1
 fi
+
+_ARCH="$(uname -m | sed 's/aarch64/arm64/')"
+NODE_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${TENANT_ID}-eks-dx-${_ARCH}"
 
 # ── EKS-D image registry ──────────────────────────────────────────────────────
 if [ ! -f /opt/eks-d/manifests/eks-d-versions.env ]; then

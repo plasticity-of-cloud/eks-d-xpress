@@ -80,7 +80,7 @@ fi
 # Run boot-time cluster setup
 echo "Starting EKS-D cluster setup..."
 cd /opt/eks-d-setup
-bash setup-eks-d.sh "${TENANT_ID}" "${CLUSTER_NAME}" 2>&1 | tee /var/log/eks-dx-install-all.log
+bash setup-eks-d.sh 2>&1 | tee /var/log/eks-dx-install-all.log
 
 # Copy kubeconfig for the login user (cloud-init runs as root; ec2-user needs access too)
 LOGIN_USER="ec2-user"

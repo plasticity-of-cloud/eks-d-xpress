@@ -141,12 +141,18 @@ echo "Initializing EKS-D cluster..."
 EKSD_K8S_TAG=$(grep "kubernetes/kube-apiserver" /tmp/eks-d-release.yaml | grep "uri:" | head -1 | sed 's/.*://')
 EKSD_ETCD_TAG=$(grep "etcd-io/etcd" /tmp/eks-d-release.yaml | grep "uri:" | head -1 | sed 's/.*://')
 EKSD_COREDNS_TAG=$(grep "coredns/coredns" /tmp/eks-d-release.yaml | grep "uri:" | head -1 | sed 's/.*://')
-PRIVATE_IP=$(hostname -I | awk '{print $1}')
 
-# Get metadata using IMDSv2
-TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
-AWS_REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
-AWS_ACCOUNT_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/dynamic/instance-identity/document | python3 -c "import sys,json; print(json.load(sys.stdin)['accountId'])")
+# Source cluster.env for pre-computed values (NODE_IP, AWS_REGION, AWS_ACCOUNT_ID)
+# NODE_IP is deterministically assigned by TenantEc2Service — no IMDS lookup needed
+[ -f /opt/eks-d/cluster.env ] && source /opt/eks-d/cluster.env
+PRIVATE_IP="${NODE_IP:-$(hostname -I | awk '{print $1}')}"
+
+# AWS_REGION / AWS_ACCOUNT_ID already in cluster.env; fall back to IMDS only if missing
+if [ -z "${AWS_REGION:-}" ] || [ -z "${AWS_ACCOUNT_ID:-}" ]; then
+  TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
+  [ -z "${AWS_REGION:-}" ]     && AWS_REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
+  [ -z "${AWS_ACCOUNT_ID:-}" ] && AWS_ACCOUNT_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/dynamic/instance-identity/document | python3 -c "import sys,json; print(json.load(sys.stdin)['accountId'])")
+fi
 
 echo "  k8s tag:     ${EKSD_K8S_TAG}"
 echo "  etcd tag:    ${EKSD_ETCD_TAG}"
@@ -181,6 +187,7 @@ apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 nodeRegistration:
   kubeletExtraArgs:
+    node-ip: "${PRIVATE_IP}"
     image-credential-provider-config: /etc/kubernetes/credential-provider/config.yaml
     image-credential-provider-bin-dir: /usr/bin
     cloud-provider: external

@@ -17,16 +17,15 @@ if [ -z "$TENANT_ID" ] || [ -z "$CLUSTER_NAME" ]; then
   exit 1
 fi
 
-# Use pre-calculated AWS variables from cluster.env
-if [ -z "$AWS_REGION" ] || [ -z "$AWS_ACCOUNT_ID" ] || [ -z "$CLUSTER_ENDPOINT" ]; then
+if [ -z "$AWS_REGION" ] || [ -z "$AWS_ACCOUNT_ID" ]; then
   echo "Error: AWS environment variables not found in /opt/eks-d/cluster.env"
-  echo "Run install-all.sh to calculate these variables first"
   exit 1
 fi
 
+CLUSTER_ENDPOINT="https://${NODE_IP}:6443"
+
 # On EKS-D, there is no EKS managed control plane — Karpenter cannot use DescribeCluster.
 # clusterEndpoint must be set explicitly to the API server address.
-# Use pre-calculated endpoint from cluster.env
 
 # Source versions from central config
 [ -f /opt/eks-d/manifests/eks-d-versions.env ] && source /opt/eks-d/manifests/eks-d-versions.env
