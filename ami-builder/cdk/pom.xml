@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>cloud.plasticity</groupId>
+  <artifactId>eks-d-xpress-packer-iam</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <cdk.version>2.257.0</cdk.version>
+    <constructs.version>10.4.2</constructs.version>
+    <mainClass>cloud.plasticity.eksdx.packer.PackerIamApp</mainClass>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>software.amazon.awscdk</groupId>
+      <artifactId>aws-cdk-lib</artifactId>
+      <version>${cdk.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>software.constructs</groupId>
+      <artifactId>constructs</artifactId>
+      <version>${constructs.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.0</version>
+        <configuration>
+          <mainClass>${mainClass}</mainClass>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

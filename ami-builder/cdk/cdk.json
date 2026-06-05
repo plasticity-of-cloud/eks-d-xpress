@@ -1,0 +1,7 @@
+{
+  "app": "mvn -e -q compile exec:java",
+  "context": {
+    "githubOrg": "plasticity-of-cloud",
+    "githubRepo": "eks-d-xpress"
+  }
+}
