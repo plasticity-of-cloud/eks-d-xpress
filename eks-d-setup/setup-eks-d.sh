@@ -57,11 +57,7 @@ if [ -n "${_LOGIN_HOME}" ] && [ -f /etc/kubernetes/admin.conf ]; then
   echo "✓ kubeconfig copied to ${_LOGIN_USER}"
 fi
 
-# Allow kube-proxy and CNI init containers time to stabilise before applying
-# the CNI manifest. Without this pause, CNI pods time out reaching the API
-# server ClusterIP before kube-proxy has finished programming iptables rules.
-echo "Waiting 20s for kube-proxy to stabilise before CNI install..."
-sleep 20
+# kube-proxy readiness is already confirmed by 07-install-eks-d.sh (polls ClusterIP).
 
 # Step 4: AWS VPC CNI
 echo "Step 4/10: Installing AWS VPC CNI..."
