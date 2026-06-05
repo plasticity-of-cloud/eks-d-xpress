@@ -1,175 +1,46 @@
 #!/bin/bash
+# 07-install-eks-d.sh - kubeadm init only.
+# All binaries (kubeadm, kubelet, kubectl), kubelet systemd service, sysctl,
+# kernel modules, containerd, and ECR credential provider are pre-baked into the AMI.
 set -e
 
-# Detect architecture
-ARCH=$(uname -m)
-case $ARCH in
-  x86_64)  ARCH="amd64" ;;
-  aarch64) ARCH="arm64" ;;
-  *)
-    echo "Unsupported architecture: $ARCH"
-    exit 1
-    ;;
-esac
+RELEASE_MANIFEST="/opt/eks-d/manifests/eks-d-release.yaml"
 
-echo "Detected architecture: $ARCH"
-
-# Load EKS version information
-if [ -f "/opt/eks-d/version.env" ]; then
-  source /opt/eks-d/version.env
-  echo "Using stored versions: EKS ${EKS_VERSION}, EKS-D ${EKSD_VERSION}"
-else
-  # Fallback to hardcoded values if version file not found
-  echo "Warning: EKS-D version file not found, using fallback values"
-  EKS_VERSION="1.35"
-  EKSD_VERSION="1.35.8"
-fi
-
-# Convert to EKS-D format for manifest lookup
-EKSD_VERSION_PARTS=(${EKSD_VERSION//./ })
-EKSD_MANIFEST_VERSION="${EKSD_VERSION_PARTS[0]}-${EKSD_VERSION_PARTS[1]}"
-EKSD_RELEASE="${EKSD_VERSION_PARTS[2]}"
-
-echo "Installing EKS-D (EKS Distro) ${EKSD_VERSION} for ${ARCH}..."
-
-# Download EKS-D release manifest
-echo "Downloading EKS-D release manifest..."
-curl -sL "https://distro.eks.amazonaws.com/kubernetes-${EKSD_MANIFEST_VERSION}/kubernetes-${EKSD_MANIFEST_VERSION}-eks-${EKSD_RELEASE}.yaml" \
-  -o /tmp/eks-d-release.yaml
-
-# Extract component URLs for the detected architecture
-echo "Extracting ${ARCH} binaries..."
-KUBEADM_URL=$(grep "bin/linux/${ARCH}/kubeadm" /tmp/eks-d-release.yaml -B 1 | grep "uri:" | awk '{print $2}')
-KUBELET_URL=$(grep "bin/linux/${ARCH}/kubelet" /tmp/eks-d-release.yaml -B 1 | grep "uri:" | awk '{print $2}')
-KUBECTL_URL=$(grep "bin/linux/${ARCH}/kubectl" /tmp/eks-d-release.yaml -B 1 | grep "uri:" | awk '{print $2}')
-
-echo "Downloading EKS-D binaries..."
-if [ -x /usr/local/bin/kubeadm ] && [ -x /usr/local/bin/kubelet ] && [ -x /usr/local/bin/kubectl ]; then
-  echo "✓ EKS-D binaries already installed (pre-baked in AMI)"
-else
-  curl -sL "${KUBEADM_URL}" -o /tmp/kubeadm
-  sudo install -o root -g root -m 0755 /tmp/kubeadm /usr/local/bin/kubeadm
-
-  curl -sL "${KUBELET_URL}" -o /tmp/kubelet
-  sudo install -o root -g root -m 0755 /tmp/kubelet /usr/local/bin/kubelet
-
-  curl -sL "${KUBECTL_URL}" -o /tmp/kubectl
-  sudo install -o root -g root -m 0755 /tmp/kubectl /usr/local/bin/kubectl
-fi
-
-# Create kubelet systemd service
-echo "Creating kubelet systemd service..."
-sudo mkdir -p /etc/systemd/system/kubelet.service.d
-
-cat <<EOF | sudo tee /etc/systemd/system/kubelet.service
-[Unit]
-Description=kubelet: The Kubernetes Node Agent
-Documentation=https://kubernetes.io/docs/
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-ExecStart=/usr/local/bin/kubelet
-Restart=always
-StartLimitInterval=0
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat <<EOF | sudo tee /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-[Service]
-Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
-Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
-EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
-EnvironmentFile=-/etc/default/kubelet
-ExecStart=
-ExecStart=/usr/local/bin/kubelet \$KUBELET_KUBECONFIG_ARGS \$KUBELET_CONFIG_ARGS \$KUBELET_KUBEADM_ARGS \$KUBELET_EXTRA_ARGS
-EOF
-
-echo "Enabling kubelet..."
-sudo systemctl daemon-reload
-sudo systemctl enable kubelet
-
-echo "Disabling swap..."
-sudo swapoff -a
-sudo sed -i '/ swap / s/^/#/' /etc/fstab
-
-echo "Enabling IP forwarding..."
-echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
-
-echo "Loading required kernel modules..."
-sudo modprobe nf_conntrack
-sudo modprobe br_netfilter
-
-echo "Starting containerd..."
-sudo systemctl enable containerd
-sudo systemctl start containerd
-
-# Install ECR credential provider (pre-built into AMI at /usr/bin/ecr-credential-provider)
-echo "Configuring ECR credential provider..."
-sudo mkdir -p /etc/kubernetes/credential-provider
-sudo tee /etc/kubernetes/credential-provider/config.yaml <<EOFCRED
-apiVersion: kubelet.config.k8s.io/v1
-kind: CredentialProviderConfig
-providers:
-  - name: ecr-credential-provider
-    matchImages:
-      - "*.dkr.ecr.*.amazonaws.com"
-      - "*.dkr.ecr.*.amazonaws.com.cn"
-      - "*.dkr.ecr-fips.*.amazonaws.com"
-      - "public.ecr.aws"
-    defaultCacheDuration: 12h
-    apiVersion: credentialprovider.kubelet.k8s.io/v1
-EOFCRED
-
-echo "✓ ECR credential provider installed"
-
-# If AMI_BUILD, skip kubeadm init (will run on first boot)
-if [ "${AMI_BUILD:-}" = "true" ]; then
-  echo "⏭ Skipping kubeadm init (AMI build - will run on first boot)"
-  rm -f /tmp/kubeadm /tmp/kubelet /tmp/kubectl
-  echo "✓ EKS-D binaries installed"
-  exit 0
-fi
-
-echo "Initializing EKS-D cluster..."
-
-# Extract image tags from the EKS-D release manifest
-EKSD_K8S_TAG=$(grep "kubernetes/kube-apiserver" /tmp/eks-d-release.yaml | grep "uri:" | head -1 | sed 's/.*://')
-EKSD_ETCD_TAG=$(grep "etcd-io/etcd" /tmp/eks-d-release.yaml | grep "uri:" | head -1 | sed 's/.*://')
-EKSD_COREDNS_TAG=$(grep "coredns/coredns" /tmp/eks-d-release.yaml | grep "uri:" | head -1 | sed 's/.*://')
-
-# Source cluster.env for pre-computed values (NODE_IP, AWS_REGION, AWS_ACCOUNT_ID, POD_SUBNET)
-# NODE_IP is deterministically assigned by TenantEc2Service — no IMDS lookup needed
-[ -f /opt/eks-d/cluster.env ] && source /opt/eks-d/cluster.env
-PRIVATE_IP="${NODE_IP:-$(hostname -I | awk '{print $1}')}"
-
-if [ -z "${POD_SUBNET:-}" ]; then
-  echo "Error: POD_SUBNET not set in /opt/eks-d/cluster.env"
+if [ ! -f "$RELEASE_MANIFEST" ]; then
+  echo "Error: $RELEASE_MANIFEST not found — was this AMI built correctly?"
   exit 1
 fi
 
-# AWS_REGION / AWS_ACCOUNT_ID already in cluster.env; fall back to IMDS only if missing
-if [ -z "${AWS_REGION:-}" ] || [ -z "${AWS_ACCOUNT_ID:-}" ]; then
-  TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
-  [ -z "${AWS_REGION:-}" ]     && AWS_REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
-  [ -z "${AWS_ACCOUNT_ID:-}" ] && AWS_ACCOUNT_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/dynamic/instance-identity/document | python3 -c "import sys,json; print(json.load(sys.stdin)['accountId'])")
+# Detect architecture
+ARCH=$(uname -m)
+[ "$ARCH" = "x86_64" ]  && ARCH="amd64"
+[ "$ARCH" = "aarch64" ] && ARCH="arm64"
+
+# Extract image tags from the baked release manifest
+EKSD_K8S_TAG=$(grep "kubernetes/kube-apiserver" "$RELEASE_MANIFEST" | grep "uri:" | head -1 | sed 's/.*://')
+EKSD_ETCD_TAG=$(grep "etcd-io/etcd" "$RELEASE_MANIFEST" | grep "uri:" | head -1 | sed 's/.*://')
+EKSD_COREDNS_TAG=$(grep "coredns/coredns" "$RELEASE_MANIFEST" | grep "uri:" | head -1 | sed 's/.*://')
+
+# All runtime values come from cluster.env (written by TenantEc2Service at launch)
+source /opt/eks-d/cluster.env
+
+if [ -z "${NODE_IP:-}" ] || [ -z "${POD_SUBNET:-}" ]; then
+  echo "Error: NODE_IP and POD_SUBNET must be set in /opt/eks-d/cluster.env"
+  exit 1
 fi
 
-echo "  k8s tag:     ${EKSD_K8S_TAG}"
-echo "  etcd tag:    ${EKSD_ETCD_TAG}"
-echo "  coredns tag: ${EKSD_COREDNS_TAG}"
-echo "  node IP:     ${PRIVATE_IP}"
+echo "  k8s tag:    ${EKSD_K8S_TAG}"
+echo "  etcd tag:   ${EKSD_ETCD_TAG}"
+echo "  coredns tag:${EKSD_COREDNS_TAG}"
+echo "  node IP:    ${NODE_IP}"
+echo "  pod subnet: ${POD_SUBNET}"
 
 cat <<EOF | sudo tee /tmp/kubeadm-config.yaml
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
 imageRepository: public.ecr.aws/eks-distro/kubernetes
 kubernetesVersion: ${EKSD_K8S_TAG}
-controlPlaneEndpoint: ${PRIVATE_IP}
+controlPlaneEndpoint: ${NODE_IP}
 networking:
   serviceSubnet: 10.96.0.0/12
   podSubnet: "${POD_SUBNET}"
@@ -193,7 +64,7 @@ apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 nodeRegistration:
   kubeletExtraArgs:
-    node-ip: "${PRIVATE_IP}"
+    node-ip: "${NODE_IP}"
     image-credential-provider-config: /etc/kubernetes/credential-provider/config.yaml
     image-credential-provider-bin-dir: /usr/bin
     cloud-provider: external
@@ -208,8 +79,6 @@ sudo kubeadm init \
   --config /tmp/kubeadm-config.yaml \
   --ignore-preflight-errors=NumCPU,DirAvailable--var-lib-etcd \
   --v=5 || {
-  echo "Warning: kubeadm init had non-critical errors, but cluster may still be functional"
-  # Check if cluster is actually working
   if sudo kubectl get nodes --kubeconfig /etc/kubernetes/admin.conf >/dev/null 2>&1; then
     echo "✓ Cluster is functional despite kubeadm warnings"
   else
@@ -218,34 +87,24 @@ sudo kubeadm init \
   fi
 }
 
-echo "Setting up kubeconfig..."
-mkdir -p $HOME/.kube
+mkdir -p $HOME/.kube /root/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
-
-# Cleanup
-rm -f /tmp/eks-d-release.yaml /tmp/kubeadm /tmp/kubelet /tmp/kubectl /tmp/kubeadm-config.yaml
-
-echo "✓ EKS-D installed"
-
-
-# Copy admin.conf for root so all subsequent scripts can use kubectl without --kubeconfig
-mkdir -p /root/.kube
 cp /etc/kubernetes/admin.conf /root/.kube/config
 
-kubectl version --client
+rm -f /tmp/kubeadm-config.yaml
+
+echo "✓ EKS-D installed"
 kubectl get nodes
 
-# Wait for kube-proxy to program ClusterIP iptables/nftables rules.
-# On cold boot, kube-proxy takes ~30s to sync informers and program rules.
-# Without this, aws-node (CNI) crashes trying to reach the API server via ClusterIP.
+# Wait for kube-proxy to program ClusterIP iptables rules before CNI install.
 echo "Waiting for kube-proxy to program service routing rules..."
 KUBE_SVC_IP=$(kubectl get svc kubernetes -o jsonpath='{.spec.clusterIP}')
 for i in $(seq 1 60); do
-  if curl -sk --connect-timeout 2 "https://${KUBE_SVC_IP}:443/version" >/dev/null 2>&1; then
+  curl -sk --connect-timeout 2 "https://${KUBE_SVC_IP}:443/version" >/dev/null 2>&1 && {
     echo "✓ kube-proxy rules active (ClusterIP ${KUBE_SVC_IP} routable)"
     break
-  fi
+  }
   [ "$i" -eq 60 ] && echo "Warning: kube-proxy rules not confirmed after 60s, proceeding anyway"
   sleep 1
 done
