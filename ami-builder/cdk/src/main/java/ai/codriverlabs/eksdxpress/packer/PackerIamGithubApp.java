@@ -4,11 +4,11 @@ import software.amazon.awscdk.App;
 import software.amazon.awscdk.Environment;
 import software.amazon.awscdk.StackProps;
 
-public class PackerIamApp {
+public class PackerIamGithubApp {
     public static void main(String[] args) {
         var app = new App();
 
-        new EksDXpressPackerIamStack(app, "EksDXpressPackerIamStack", StackProps.builder()
+        new EksDXpressPackerIamStack(app, "EksDXpressPackerIamGithubStack", StackProps.builder()
                 .env(Environment.builder()
                         .account(System.getenv("CDK_DEFAULT_ACCOUNT"))
                         .region(System.getenv("CDK_DEFAULT_REGION"))

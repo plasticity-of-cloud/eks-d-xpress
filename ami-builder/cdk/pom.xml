@@ -14,7 +14,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <cdk.version>2.257.0</cdk.version>
     <constructs.version>10.4.2</constructs.version>
-    <mainClass>ai.codriverlabs.eksdxpress.packer.PackerIamApp</mainClass>
+    <mainClass>ai.codriverlabs.eksdxpress.packer.PackerIamGithubApp</mainClass>
   </properties>
 
   <dependencies>
