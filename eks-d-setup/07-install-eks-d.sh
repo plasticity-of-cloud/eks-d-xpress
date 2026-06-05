@@ -100,11 +100,11 @@ kubectl get nodes
 # Wait for kube-proxy to program ClusterIP iptables rules before CNI install.
 echo "Waiting for kube-proxy to program service routing rules..."
 KUBE_SVC_IP=$(kubectl get svc kubernetes -o jsonpath='{.spec.clusterIP}')
-for i in $(seq 1 60); do
+for i in $(seq 1 15); do
   curl -sk --connect-timeout 2 "https://${KUBE_SVC_IP}:443/version" >/dev/null 2>&1 && {
     echo "✓ kube-proxy rules active (ClusterIP ${KUBE_SVC_IP} routable)"
     break
   }
-  [ "$i" -eq 60 ] && echo "Warning: kube-proxy rules not confirmed after 60s, proceeding anyway"
+  [ "$i" -eq 15 ] && echo "Warning: kube-proxy rules not confirmed after 15s, proceeding anyway"
   sleep 1
 done
