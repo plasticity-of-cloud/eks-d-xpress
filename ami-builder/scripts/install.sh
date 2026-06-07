@@ -162,9 +162,11 @@ echo "==> Baking Kubernetes kernel networking settings..."
 cat <<'EOF' | sudo tee /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
+nf_conntrack
 EOF
 sudo modprobe overlay
 sudo modprobe br_netfilter
+sudo modprobe nf_conntrack
 cat <<'EOF' | sudo tee /etc/sysctl.d/99-k8s.conf
 net.ipv4.ip_forward = 1
 net.bridge.bridge-nf-call-iptables = 1
@@ -412,6 +414,12 @@ echo "==> Installing eks-dx-boot.service..."
 sudo cp /tmp/scripts/eks-dx-boot.service /etc/systemd/system/eks-dx-boot.service
 sudo systemctl daemon-reload
 sudo systemctl enable eks-dx-boot.service
+
+# Disable swap — kubeadm requires swap off; persists across reboots.
+echo "==> Disabling swap..."
+sudo swapoff -a
+sudo touch /etc/systemd/zram-generator.conf  # empty file disables zram swap
+sudo sed -i '/ swap /d' /etc/fstab 2>/dev/null || true
 
 # Clean up helm ECR session — workstations use the ECR credential provider instead
 echo "==> Cleaning up temporary ECR credentials..."
