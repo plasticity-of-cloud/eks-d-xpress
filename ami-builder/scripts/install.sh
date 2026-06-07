@@ -110,6 +110,54 @@ PUBLIC_ECR_CACHE="${ECR_REGISTRY}/public-ecr"
 K8S_REGISTRY_CACHE="${ECR_REGISTRY}/registry-k8s-io"
 echo "    ✓ ECR registry: ${ECR_REGISTRY}"
 
+echo "==> Baking kubelet systemd service..."
+sudo mkdir -p /etc/systemd/system/kubelet.service.d
+cat <<'EOF' | sudo tee /etc/systemd/system/kubelet.service
+[Unit]
+Description=kubelet: The Kubernetes Node Agent
+Documentation=https://kubernetes.io/docs/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/kubelet
+Restart=always
+StartLimitInterval=0
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+cat <<'EOF' | sudo tee /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+[Service]
+Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+EnvironmentFile=-/etc/default/kubelet
+ExecStart=
+ExecStart=/usr/local/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable kubelet
+echo "✓ kubelet service baked and enabled"
+
+echo "==> Baking ECR credential provider config..."
+sudo mkdir -p /etc/kubernetes/credential-provider
+cat <<'EOF' | sudo tee /etc/kubernetes/credential-provider/config.yaml
+apiVersion: kubelet.config.k8s.io/v1
+kind: CredentialProviderConfig
+providers:
+  - name: ecr-credential-provider
+    matchImages:
+      - "*.dkr.ecr.*.amazonaws.com"
+      - "*.dkr.ecr.*.amazonaws.com.cn"
+      - "*.dkr.ecr-fips.*.amazonaws.com"
+      - "public.ecr.aws"
+    defaultCacheDuration: 12h
+    apiVersion: credentialprovider.kubelet.k8s.io/v1
+EOF
+echo "✓ ECR credential provider config baked"
+
 echo "==> Baking Kubernetes kernel networking settings..."
 cat <<'EOF' | sudo tee /etc/modules-load.d/k8s.conf
 overlay
