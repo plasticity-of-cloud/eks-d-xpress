@@ -92,9 +92,15 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+
+      - name: Prepare release scripts
+        run: |
+          cp eks-d-setup/12-install-eks-dx-pod-identity.sh install-eks-dx-pod-identity.sh
 
       - name: Merge AMI manifest entries
         run: |
@@ -115,13 +121,14 @@ jobs:
           EOF
 
       - name: Generate checksums
-        run: sha256sum ecr-credential-provider-* ami-manifest.json sbom-*.spdx.json > checksums.txt
+        run: sha256sum ecr-credential-provider-* ami-manifest.json sbom-*.spdx.json install-eks-dx-pod-identity.sh > checksums.txt
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             ecr-credential-provider-*
             ami-manifest.json
+            install-eks-dx-pod-identity.sh
             sbom-*.spdx.json
             checksums.txt
           generate_release_notes: true
