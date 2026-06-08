@@ -59,11 +59,15 @@ rm -f /tmp/ecr-credential-provider
 echo "✓ ecr-credential-provider installed"
 
 echo "==> Installing eks-dx CLI..."
-EKS_DX_CLI_URL="https://github.com/plasticity-of-cloud/eks-d-xpress-control-plane/releases/download/v${EKS_DX_CONTROL_PLANE_VERSION}/eks-dx-cli-${EKS_DX_CONTROL_PLANE_VERSION}-linux-${ARCH}"
-curl -fsSL "$EKS_DX_CLI_URL" -o /tmp/eks-dx
-sudo install -o root -g root -m 0755 /tmp/eks-dx /usr/local/bin/eks-dx
-rm -f /tmp/eks-dx
-echo "✓ eks-dx CLI installed"
+if [[ "${INSTALL_EKS_DX:-false}" == "true" ]]; then
+  EKS_DX_CLI_URL="https://github.com/plasticity-of-cloud/eks-d-xpress-control-plane/releases/download/v${EKS_DX_CONTROL_PLANE_VERSION}/eks-dx-cli-${EKS_DX_CONTROL_PLANE_VERSION}-linux-${ARCH}"
+  curl -fsSL "$EKS_DX_CLI_URL" -o /tmp/eks-dx
+  sudo install -o root -g root -m 0755 /tmp/eks-dx /usr/local/bin/eks-dx
+  rm -f /tmp/eks-dx
+  echo "✓ eks-dx CLI installed"
+else
+  echo "  Skipping eks-dx CLI (INSTALL_EKS_DX=false)"
+fi
 
 echo "==> Installing syft (SBOM generator)..."
 SYFT_URL="https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_${ARCH}.tar.gz"
