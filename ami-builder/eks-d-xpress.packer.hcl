@@ -71,11 +71,13 @@ source "amazon-ebs" "x86_64" {
       Effect   = "Allow"
       Action   = [
         "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability",
         "ecr:BatchGetImage",
         "ecr:GetDownloadUrlForLayer",
         "ecr:CreateRepository",
         "ecr:BatchImportUpstreamImage",
         "ssm:GetParameter",
+        "sts:GetCallerIdentity",
       ]
       Resource = ["*"]
     }
@@ -135,11 +137,13 @@ source "amazon-ebs" "arm64" {
       Effect   = "Allow"
       Action   = [
         "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability",
         "ecr:BatchGetImage",
         "ecr:GetDownloadUrlForLayer",
         "ecr:CreateRepository",
         "ecr:BatchImportUpstreamImage",
         "ssm:GetParameter",
+        "sts:GetCallerIdentity",
       ]
       Resource = ["*"]
     }
