@@ -100,6 +100,9 @@ jobs:
 
       - name: Prepare release scripts
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp eks-d-setup/12-install-eks-dx-pod-identity.sh "install-eks-dx-pod-identity-${VERSION}.sh"
+          # Also publish without version suffix for convenience
           cp eks-d-setup/12-install-eks-dx-pod-identity.sh install-eks-dx-pod-identity.sh
 
       - name: Merge AMI manifest entries
@@ -121,14 +124,14 @@ jobs:
           EOF
 
       - name: Generate checksums
-        run: sha256sum ecr-credential-provider-* ami-manifest.json sbom-*.spdx.json install-eks-dx-pod-identity.sh > checksums.txt
+        run: sha256sum ecr-credential-provider-* ami-manifest.json sbom-*.spdx.json install-eks-dx-pod-identity*.sh > checksums.txt
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             ecr-credential-provider-*
             ami-manifest.json
-            install-eks-dx-pod-identity.sh
+            install-eks-dx-pod-identity*.sh
             sbom-*.spdx.json
             checksums.txt
           generate_release_notes: true

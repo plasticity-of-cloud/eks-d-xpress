@@ -58,8 +58,8 @@ rm -f /tmp/ecr-credential-provider
 echo "✓ ecr-credential-provider installed"
 
 echo "==> Installing eks-dx CLI..."
-EKS_DX_CLI_URL="https://github.com/plasticity-of-cloud/eks-dx-control-plane/releases/download/v${EKS_DX_CONTROL_PLANE_VERSION}/eks-dx-${EKS_DX_CONTROL_PLANE_VERSION}-linux-${ARCH}"
-curl -sL "$EKS_DX_CLI_URL" -o /tmp/eks-dx
+EKS_DX_CLI_URL="https://github.com/plasticity-of-cloud/eks-d-xpress-control-plane/releases/download/v${EKS_DX_CONTROL_PLANE_VERSION}/eks-dx-cli-${EKS_DX_CONTROL_PLANE_VERSION}-linux-${ARCH}"
+curl -fsSL "$EKS_DX_CLI_URL" -o /tmp/eks-dx
 sudo install -o root -g root -m 0755 /tmp/eks-dx /usr/local/bin/eks-dx
 rm -f /tmp/eks-dx
 echo "✓ eks-dx CLI installed"
@@ -71,13 +71,6 @@ tar -xzf /tmp/syft.tar.gz -C /tmp syft
 sudo install -o root -g root -m 0755 /tmp/syft /usr/local/bin/syft
 rm -f /tmp/syft.tar.gz /tmp/syft
 echo "✓ syft ${SYFT_VERSION} installed"
-
-echo "==> Baking canonical install-eks-dx-pod-identity.sh into AMI..."
-sudo mkdir -p /opt/eks-d/scripts
-EKS_DX_INSTALL_URL="https://github.com/plasticity-of-cloud/eks-dx-control-plane/releases/download/v${EKS_DX_CONTROL_PLANE_VERSION}/install-eks-dx-pod-identity-${EKS_DX_CONTROL_PLANE_VERSION}.sh"
-sudo curl -sL "$EKS_DX_INSTALL_URL" -o /opt/eks-d/scripts/install-eks-dx-pod-identity.sh
-sudo chmod +x /opt/eks-d/scripts/install-eks-dx-pod-identity.sh
-echo "✓ install-eks-dx-pod-identity.sh baked at /opt/eks-d/scripts/"
 
 export AMI_BUILD=true
 
