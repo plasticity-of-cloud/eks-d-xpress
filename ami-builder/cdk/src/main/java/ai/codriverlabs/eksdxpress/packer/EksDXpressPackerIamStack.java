@@ -91,7 +91,7 @@ public class EksDXpressPackerIamStack extends Stack {
                 .sid("PackerEC2Write")
                 .effect(Effect.ALLOW)
                 .actions(List.of(
-                        "ec2:RunInstances", "ec2:CreateKeyPair",
+                        "ec2:CreateKeyPair",
                         "ec2:CreateSecurityGroup", "ec2:CreateVolume",
                         "ec2:CreateImage", "ec2:RegisterImage",
                         "ec2:CreateSnapshot", "ec2:CreateTags",
@@ -114,7 +114,17 @@ public class EksDXpressPackerIamStack extends Stack {
                         "ec2:ModifySnapshotAttribute", "ec2:DeregisterImage"))
                 .resources(List.of("*"))
                 .conditions(Map.of("StringEquals",
-                        Map.of("aws:ResourceTag/CreatedBy", "packer")))
+                        Map.of("aws:ResourceTag/ManagedBy", "Packer")))
+                .build());
+
+        // EC2 write — region-locked; constrained to builder instance types
+        packerRole.addToPolicy(PolicyStatement.Builder.create()
+                .sid("PackerEC2RunInstances")
+                .effect(Effect.ALLOW)
+                .actions(List.of("ec2:RunInstances"))
+                .resources(List.of("arn:aws:ec2:" + region + ":" + account + ":instance/*"))
+                .conditions(Map.of("StringLike",
+                        Map.of("ec2:InstanceType", List.of("c6a.large", "c6g.large"))))
                 .build());
 
         // IAM — instance profile lifecycle scoped to packer_* prefix
