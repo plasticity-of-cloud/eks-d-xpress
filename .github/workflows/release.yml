@@ -100,7 +100,7 @@ jobs:
 
       - name: Prepare release scripts
         run: |
-          cp eks-d-setup/12-install-eks-dx-pod-identity.sh install-eks-dx-pod-identity.sh
+          cp eks-d-setup/install-eks-dx-pod-identity.sh install-eks-dx-pod-identity.sh
 
       - name: Merge AMI manifest entries
         run: |

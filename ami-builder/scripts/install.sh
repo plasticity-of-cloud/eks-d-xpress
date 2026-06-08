@@ -72,17 +72,6 @@ sudo install -o root -g root -m 0755 /tmp/syft /usr/local/bin/syft
 rm -f /tmp/syft.tar.gz /tmp/syft
 echo "✓ syft ${SYFT_VERSION} installed"
 
-echo "==> Baking canonical install-eks-dx-pod-identity.sh into AMI..."
-sudo mkdir -p /opt/eks-d/scripts
-EKS_DX_INSTALL_URL="https://github.com/plasticity-of-cloud/eks-d-xpress-control-plane/releases/download/v${EKS_DX_CONTROL_PLANE_VERSION}/install-eks-dx-pod-identity.sh"
-sudo curl -fsSL "$EKS_DX_INSTALL_URL" -o /opt/eks-d/scripts/install-eks-dx-pod-identity.sh
-if ! head -1 /opt/eks-d/scripts/install-eks-dx-pod-identity.sh | grep -q '^#!'; then
-  echo "ERROR: Downloaded file is not a shell script (URL: $EKS_DX_INSTALL_URL)" >&2
-  exit 1
-fi
-sudo chmod +x /opt/eks-d/scripts/install-eks-dx-pod-identity.sh
-echo "✓ install-eks-dx-pod-identity.sh baked at /opt/eks-d/scripts/"
-
 export AMI_BUILD=true
 
 # Set up ECR pull-through cache — resolve account/region early but auth after containerd is installed

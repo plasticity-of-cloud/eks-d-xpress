@@ -16,7 +16,7 @@ if [ -z "${EKS_DX_ENDPOINT:-}" ]; then
   exit 0
 fi
 
-CANONICAL_SCRIPT="/opt/eks-d/scripts/install-eks-dx-pod-identity.sh"
+CANONICAL_SCRIPT="$(dirname "$0")/install-eks-dx-pod-identity.sh"
 if [ ! -f "$CANONICAL_SCRIPT" ]; then
   echo "Error: $CANONICAL_SCRIPT not found — was the AMI built correctly?"
   exit 1
