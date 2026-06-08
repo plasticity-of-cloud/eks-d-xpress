@@ -8,15 +8,15 @@
 #   3. eks-pod-identity-agent — AWS DaemonSet (intercepts 169.254.170.23)
 #
 # Required environment variables:
-#   CLUSTER_NAME      — unique cluster identifier
-#   AWS_REGION        — AWS region
+#   CLUSTER_NAME                 — unique cluster identifier
+#   AWS_REGION                   — AWS region
+#   EKS_DX_CONTROL_PLANE_VERSION — eks-dx-control-plane release version (sourced from /opt/eks-d/version.env)
 #
 # Optional environment variables:
-#   EKS_DX_ENDPOINT   — API Gateway URL override (default: resolved from SSM /eks-d-xpress/control-plane/api/endpoint)
-#   EKS_DX_VERSION    — eks-dx-control-plane release version (default: derived from script filename or "latest")
-#   KUBECONFIG        — path to kubeconfig (default: standard lookup)
-#   CHART_DIR         — directory containing pre-downloaded chart tarballs (AMI bake path)
-#                       falls back to GHCR OCI pull if not set or charts not found
+#   EKS_DX_ENDPOINT              — API Gateway URL override (default: resolved from SSM /eks-d-xpress/control-plane/api/endpoint)
+#   KUBECONFIG                   — path to kubeconfig (default: standard lookup)
+#   CHART_DIR                    — directory containing pre-downloaded chart tarballs (AMI bake path)
+#                                  falls back to GHCR OCI pull if not set or charts not found
 #
 # Usage:
 #   curl -sL https://github.com/plasticity-of-cloud/eks-d-xpress-control-plane/releases/download/vVERSION/install-eks-dx-pod-identity.sh \
@@ -42,11 +42,7 @@ if [[ -z "${EKS_DX_ENDPOINT:-}" ]]; then
 fi
 [[ -z "${EKS_DX_ENDPOINT:-}" ]] && err "EKS_DX_ENDPOINT could not be resolved — set env var or ensure SSM param /eks-d-xpress/control-plane/api/endpoint exists"
 
-# Derive version: prefer explicit var, then parse from script filename (when downloaded as release asset)
-if [[ -z "${EKS_DX_VERSION:-}" ]]; then
-  EKS_DX_VERSION=$(basename "${BASH_SOURCE[0]}" | grep -oP '\d+\.\d+\.\d+[\w.-]*' || true)
-fi
-[[ -z "${EKS_DX_VERSION:-}" ]] && err "EKS_DX_VERSION could not be determined — set it explicitly"
+[[ -z "${EKS_DX_CONTROL_PLANE_VERSION:-}" ]] && err "EKS_DX_CONTROL_PLANE_VERSION is required — set it explicitly or ensure /opt/eks-d/version.env is present"
 
 CHART_DIR="${CHART_DIR:-/opt/eks-d/charts}"
 GHCR_REGISTRY="ghcr.io/plasticity-of-cloud"
@@ -55,7 +51,7 @@ log "EKS-DX Pod Identity installation"
 log "  Cluster:  ${CLUSTER_NAME}"
 log "  Region:   ${AWS_REGION}"
 log "  Endpoint: ${EKS_DX_ENDPOINT}"
-log "  Version:  ${EKS_DX_VERSION}"
+log "  Version:  ${EKS_DX_CONTROL_PLANE_VERSION}"
 
 # ── Helper: resolve chart (local cache first, GHCR OCI fallback) ──────────────
 chart_ref() {
@@ -65,7 +61,7 @@ chart_ref() {
   if [[ -n "$tgz" ]]; then
     echo "$tgz"
   else
-    echo "oci://${GHCR_REGISTRY}/helm/${name} --version ${EKS_DX_VERSION}"
+    echo "oci://${GHCR_REGISTRY}/helm/${name} --version ${EKS_DX_CONTROL_PLANE_VERSION}"
   fi
 }
 
