@@ -172,6 +172,17 @@ net.bridge.bridge-nf-call-ip6tables = 1
 EOF
 sudo sysctl --system
 
+echo "==> Preventing systemd-networkd from managing ENI secondary IPs..."
+# VPC CNI assigns secondary IPs to ENIs for pod networking via veth pairs.
+# Without this, systemd-networkd's DHCPv4 adds those IPs directly to the host
+# interface, causing routing conflicts that hang CNI at startup.
+sudo mkdir -p /etc/systemd/network/70-ens5.network.d
+cat <<'EOF' | sudo tee /etc/systemd/network/70-ens5.network.d/no-secondary-ips.conf
+[DHCPv4]
+UseAddress=no
+EOF
+echo "✓ systemd-networkd drop-in written (ENI secondary IPs won't be claimed by host)"
+
 echo "==> Installing base system..."
 bash "${SCRIPT_DIR}/01-install-base.sh"
 
