@@ -12,7 +12,7 @@ WorkingDirectory=/opt/eks-d-setup
 ExecStart=/bin/bash /opt/eks-d-setup/workstation-boot.sh
 StandardOutput=journal+console
 StandardError=journal+console
-TimeoutStartSec=180
+TimeoutStartSec=240
 
 [Install]
 WantedBy=multi-user.target
