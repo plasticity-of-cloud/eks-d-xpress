@@ -97,6 +97,14 @@ rm -f /tmp/kubeadm-config.yaml
 echo "✓ EKS-D installed"
 kubectl get nodes
 
+# Auto-approve kubelet serving CSRs (serverTLSBootstrap: true requires this;
+# kube-controller-manager only auto-approves client CSRs, not serving CSRs)
+echo "Approving pending kubelet serving CSRs..."
+for csr in $(kubectl get csr -o jsonpath='{.items[?(@.status.certificate=="")].metadata.name}'); do
+  kubectl certificate approve "$csr" 2>/dev/null || true
+done
+echo "✓ Kubelet serving CSRs approved"
+
 # Remove loop plugin from CoreDNS — false positive with VPC CNI SNAT on single-node
 kubectl get cm coredns -n kube-system -o yaml | sed "/^[[:space:]]*loop$/d" | kubectl apply -f -
 echo "✓ CoreDNS loop plugin removed"
