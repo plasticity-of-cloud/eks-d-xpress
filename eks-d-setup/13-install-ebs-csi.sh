@@ -2,7 +2,7 @@
 set -e
 
 echo "Installing EBS CSI Driver v1.38.0 via Helm..."
-CHART=$(ls /opt/eks-d/charts/aws-ebs-csi-driver-*.tgz 2>/dev/null | head -1)
+CHART=$(ls /opt/eks-d-setup/charts/aws-ebs-csi-driver-*.tgz 2>/dev/null | head -1)
 if [ -z "$CHART" ]; then
   helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
   helm repo update

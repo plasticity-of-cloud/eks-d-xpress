@@ -205,7 +205,7 @@ sudo chmod +x /opt/eks-d-setup/*.sh
 echo "==> Pre-pulling cert-manager chart..."
 helm repo add jetstack https://charts.jetstack.io --force-update
 helm pull jetstack/cert-manager --version "v1.17.1" --destination /tmp || true
-sudo mv /tmp/cert-manager-*.tgz /opt/eks-d/charts/ 2>/dev/null || true
+sudo mv /tmp/cert-manager-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
 
 echo "==> Pre-pulling EKS-DX Pod Identity charts..."
 if [[ "${INSTALL_EKS_DX:-false}" == "true" ]]; then
@@ -230,19 +230,19 @@ helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-d
 helm repo update
 helm pull aws-cloud-controller-manager/aws-cloud-controller-manager --destination /tmp || true
 helm pull aws-ebs-csi-driver/aws-ebs-csi-driver --destination /tmp || true
-sudo mkdir -p /opt/eks-d/charts
-sudo mv /tmp/karpenter-*.tgz /opt/eks-d/charts/ 2>/dev/null || true
-sudo mv /tmp/aws-cloud-controller-manager-*.tgz /opt/eks-d/charts/ 2>/dev/null || true
-sudo mv /tmp/aws-ebs-csi-driver-*.tgz /opt/eks-d/charts/ 2>/dev/null || true
-sudo mv /tmp/eks-dx-auth-proxy-*.tgz /opt/eks-d/charts/ 2>/dev/null || true
-sudo mv /tmp/eks-dx-pod-identity-webhook-*.tgz /opt/eks-d/charts/ 2>/dev/null || true
-sudo mv /tmp/eks-pod-identity-agent-*.tgz /opt/eks-d/charts/ 2>/dev/null || true
+sudo mkdir -p /opt/eks-d-setup/charts
+sudo mv /tmp/karpenter-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
+sudo mv /tmp/aws-cloud-controller-manager-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
+sudo mv /tmp/aws-ebs-csi-driver-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
+sudo mv /tmp/eks-dx-auth-proxy-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
+sudo mv /tmp/eks-dx-pod-identity-webhook-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
+sudo mv /tmp/eks-pod-identity-agent-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
 
 echo "==> Pre-pulling CloudWatch Observability Helm chart..."
 helm repo add aws-observability https://aws-observability.github.io/helm-charts 2>/dev/null || true
 helm repo update
 helm pull aws-observability/amazon-cloudwatch-observability --destination /tmp || true
-sudo mv /tmp/amazon-cloudwatch-observability-*.tgz /opt/eks-d/charts/ 2>/dev/null || true
+sudo mv /tmp/amazon-cloudwatch-observability-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
 
 echo "==> Pre-downloading manifests..."
 sudo mkdir -p /opt/eks-d/manifests
@@ -289,7 +289,7 @@ done
 # Render Karpenter chart and extract images
 # Pull directly from public.ecr.aws — pull-through cache path for karpenter doesn't exist
 echo "==> Extracting and pulling images from Karpenter chart..."
-KARPENTER_CHART=$(ls /opt/eks-d/charts/karpenter-*.tgz 2>/dev/null | head -1)
+KARPENTER_CHART=$(ls /opt/eks-d-setup/charts/karpenter-*.tgz 2>/dev/null | head -1)
 if [ -n "$KARPENTER_CHART" ]; then
   helm template karpenter "$KARPENTER_CHART" 2>/dev/null | \
     grep -oP '(?:image|value):\s*\K[^\s"]+' | grep 'public\.ecr\.aws' | sort -u | while read img; do
@@ -301,7 +301,7 @@ fi
 # Render cloud-provider-aws chart and extract images
 # registry.k8s.io images routed through ECR pull-through cache (registry-k8s-io prefix)
 echo "==> Extracting and pulling images from cloud-provider-aws chart..."
-CLOUD_PROVIDER_CHART=$(ls /opt/eks-d/charts/aws-cloud-controller-manager-*.tgz 2>/dev/null | head -1)
+CLOUD_PROVIDER_CHART=$(ls /opt/eks-d-setup/charts/aws-cloud-controller-manager-*.tgz 2>/dev/null | head -1)
 if [ -n "$CLOUD_PROVIDER_CHART" ]; then
   cat > /tmp/extract_images.py << 'PYEOF'
 import sys, re
@@ -322,7 +322,7 @@ fi
 
 # Render EBS CSI chart and extract images
 echo "==> Extracting and pulling images from EBS CSI chart..."
-EBS_CSI_CHART=$(ls /opt/eks-d/charts/aws-ebs-csi-driver-*.tgz 2>/dev/null | head -1)
+EBS_CSI_CHART=$(ls /opt/eks-d-setup/charts/aws-ebs-csi-driver-*.tgz 2>/dev/null | head -1)
 if [ -n "$EBS_CSI_CHART" ]; then
   helm template aws-ebs-csi-driver "$EBS_CSI_CHART" 2>/dev/null | \
     grep -oP 'image:\s*\K[^\s]+' | grep -Ev 'windows|nvidia|neuron|dcgm-exporter|kubekins-e2e|e2e-test' | sort -u | while read img; do
@@ -373,7 +373,7 @@ fi
 
 # Render CloudWatch Observability chart and extract images
 echo "==> Extracting and pulling images from CloudWatch Observability chart..."
-CW_CHART=$(ls /opt/eks-d/charts/amazon-cloudwatch-observability-*.tgz 2>/dev/null | head -1)
+CW_CHART=$(ls /opt/eks-d-setup/charts/amazon-cloudwatch-observability-*.tgz 2>/dev/null | head -1)
 if [ -n "$CW_CHART" ]; then
   cat > /tmp/extract_images_cw.py << 'PYEOF'
 import sys, re
@@ -394,7 +394,7 @@ fi
 
 # Render cert-manager chart and extract images (quay.io — pulled through ECR pull-through cache)
 echo "==> Extracting and pulling images from cert-manager chart..."
-CERT_MANAGER_CHART=$(ls /opt/eks-d/charts/cert-manager-*.tgz 2>/dev/null | head -1)
+CERT_MANAGER_CHART=$(ls /opt/eks-d-setup/charts/cert-manager-*.tgz 2>/dev/null | head -1)
 QUAY_CACHE="${ECR_REGISTRY}/quay-io"
 if [ -n "$CERT_MANAGER_CHART" ]; then
   helm template cert-manager "$CERT_MANAGER_CHART" --set crds.enabled=true 2>/dev/null | \
@@ -434,6 +434,6 @@ helm registry logout "${ECR_REGISTRY}" 2>/dev/null || true
 echo ""
 echo "==> AMI build complete!"
 echo "    Scripts installed to /opt/eks-d-setup/"
-echo "    Charts installed to /opt/eks-d/charts/"
+echo "    Charts installed to /opt/eks-d-setup/charts/"
 echo "    Manifests installed to /opt/eks-d/manifests/"
 echo "    All images pre-pulled for fast boot."

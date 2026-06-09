@@ -5,7 +5,7 @@ set -e
 
 echo "Installing AWS Cloud Provider..."
 
-CHART=$(ls /opt/eks-d/charts/aws-cloud-controller-manager-*.tgz 2>/dev/null | head -1)
+CHART=$(ls /opt/eks-d-setup/charts/aws-cloud-controller-manager-*.tgz 2>/dev/null | head -1)
 if [ -z "$CHART" ]; then
   helm repo add aws-cloud-controller-manager https://kubernetes.github.io/cloud-provider-aws
   helm repo update

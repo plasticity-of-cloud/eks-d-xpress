@@ -44,7 +44,7 @@ fi
 
 [[ -z "${EKS_DX_CONTROL_PLANE_VERSION:-}" ]] && err "EKS_DX_CONTROL_PLANE_VERSION is required — set it explicitly or ensure /opt/eks-d/version.env is present"
 
-CHART_DIR="${CHART_DIR:-/opt/eks-d/charts}"
+CHART_DIR="${CHART_DIR:-/opt/eks-d-setup/charts}"
 GHCR_REGISTRY="ghcr.io/plasticity-of-cloud"
 
 log "EKS-DX Pod Identity installation"

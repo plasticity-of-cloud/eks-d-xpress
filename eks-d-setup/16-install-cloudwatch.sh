@@ -26,7 +26,7 @@ kubectl wait --for=condition=ready pod -l k8s-app=kube-proxy -n kube-system --ti
 
 echo "Installing CloudWatch Observability agent..."
 
-CHART=$(ls /opt/eks-d/charts/amazon-cloudwatch-observability-*.tgz 2>/dev/null | head -1)
+CHART=$(ls /opt/eks-d-setup/charts/amazon-cloudwatch-observability-*.tgz 2>/dev/null | head -1)
 if [ -z "$CHART" ]; then
   helm repo add aws-observability https://aws-observability.github.io/helm-charts 2>/dev/null || true
   helm repo update
