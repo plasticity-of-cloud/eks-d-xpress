@@ -150,8 +150,9 @@ public class EksDXpressPackerIamStack extends Stack {
                 .effect(Effect.ALLOW)
                 .actions(List.of(
                         "iam:CreateRole", "iam:DeleteRole",
-                        "iam:PutRolePolicy", "iam:DeleteRolePolicy"))
-                .resources(List.of("arn:aws:iam::" + account + ":role/packer_*"))
+                        "iam:PutRolePolicy", "iam:DeleteRolePolicy",
+                        "iam:TagRole"))
+                .resources(List.of("arn:aws:iam::" + account + ":role/packer*"))
                 .conditions(Map.of("StringEquals", Map.of(
                         "iam:PermissionsBoundary", packerBoundary.getManagedPolicyArn())))
                 .build());
