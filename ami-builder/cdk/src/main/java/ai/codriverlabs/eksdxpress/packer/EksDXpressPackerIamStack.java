@@ -80,6 +80,7 @@ public class EksDXpressPackerIamStack extends Stack {
                 .actions(List.of(
                         "ec2:DescribeImageAttribute", "ec2:DescribeImages",
                         "ec2:DescribeInstances", "ec2:DescribeInstanceStatus",
+                        "ec2:DescribeInstanceTypeOfferings",
                         "ec2:DescribeRegions", "ec2:DescribeSecurityGroups",
                         "ec2:DescribeSnapshots", "ec2:DescribeSubnets",
                         "ec2:DescribeTags", "ec2:DescribeVolumes", "ec2:DescribeVpcs"))
@@ -127,7 +128,8 @@ public class EksDXpressPackerIamStack extends Stack {
                         Map.of("ec2:InstanceType", List.of("c6a.large", "c6g.large"))))
                 .build());
 
-        // IAM — instance profile lifecycle scoped to packer_* prefix
+        // IAM — instance profile lifecycle scoped to packer* prefix
+        // Note: Packer uses both packer_* (keypair/sg) and packer-* (instance-profile) naming
         packerRole.addToPolicy(PolicyStatement.Builder.create()
                 .sid("PackerIAMInstanceProfile")
                 .effect(Effect.ALLOW)
@@ -137,8 +139,8 @@ public class EksDXpressPackerIamStack extends Stack {
                         "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile",
                         "iam:GetInstanceProfile", "iam:GetRole"))
                 .resources(List.of(
-                        "arn:aws:iam::" + account + ":instance-profile/packer_*",
-                        "arn:aws:iam::" + account + ":role/packer_*"))
+                        "arn:aws:iam::" + account + ":instance-profile/packer*",
+                        "arn:aws:iam::" + account + ":role/packer*"))
                 .build());
 
         // IAM — role creation gated on permissions boundary to block escalation
