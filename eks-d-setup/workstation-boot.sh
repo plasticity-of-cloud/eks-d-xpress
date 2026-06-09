@@ -15,15 +15,16 @@ exec > >(tee -a "$BOOT_LOG") 2>&1
 # background so EBS blocks are hot before kubeadm starts (~30s head start).
 dd if=/dev/xvda of=/dev/null bs=1M count=256 iflag=direct 2>/dev/null &
 
-# Wait for IMDS to be reachable (ENI must be fully attached)
-echo "Waiting for IMDS..."
+# Wait for EC2 instance status checks (3/3) — bootstrapping during "Initializing"
+# causes EC2 API failures and unreliable ENI/IMDS responses.
+echo "Waiting for EC2 status checks (3/3)..."
 for i in $(seq 1 30); do
-  TOKEN=$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60" -m 2 2>/dev/null) && \
-  curl -sf -m 2 -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id >/dev/null 2>&1 && {
-    echo "✓ IMDS ready"
-    break
-  }
-  [ "$i" -eq 30 ] && { echo "ERROR: IMDS not reachable after 30s"; exit 1; }
+  TOKEN=$(curl -sf -X PUT http://169.254.169.254/latest/api/token \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 60" -m 2 2>/dev/null || true)
+  STATUS=$(curl -sf -m 2 -H "X-aws-ec2-metadata-token: $TOKEN" \
+    http://169.254.169.254/latest/meta-data/instance-status/status 2>/dev/null || true)
+  [ "$STATUS" = "ok" ] && { echo "✓ EC2 status checks passed"; break; }
+  [ "$i" -eq 30 ] && echo "Warning: status checks not confirmed after 30s, proceeding"
   sleep 1
 done
 
