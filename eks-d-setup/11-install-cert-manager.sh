@@ -10,8 +10,8 @@ CERT_MANAGER_VERSION="v1.17.1"
 echo "Installing cert-manager ${CERT_MANAGER_VERSION}..."
 
 # Use pre-cached chart if available
-CHART="/opt/eks-d/charts/cert-manager-${CERT_MANAGER_VERSION}.tgz"
-if [ ! -f "$CHART" ]; then
+CHART=$(ls /opt/eks-d/charts/cert-manager-*.tgz 2>/dev/null | head -1)
+if [ -z "$CHART" ]; then
   CHART="jetstack/cert-manager"
   helm repo add jetstack https://charts.jetstack.io --force-update
   helm repo update jetstack
