@@ -1,6 +1,32 @@
 #!/bin/bash
 set -e
 
+# Disable amazon-ec2-net-utils policy-routes before CNI install.
+#
+# On AL2023, policy-routes@.service creates "from <ip> lookup <table>" ip rules
+# for ENI secondary IPs. VPC CNI assigns those same IPs to pods — when the
+# policy-routes rules exist, pod traffic to 169.254.169.254 (IMDS) gets routed
+# through per-ENI tables that lack a link-local route, making IMDS unreachable.
+# This breaks EBS CSI, cloud-provider-aws, and any pod relying on instance metadata.
+echo "Disabling ec2-net-utils policy-routes (conflicts with VPC CNI)..."
+sudo systemctl disable --now policy-routes@ens5.service policy-routes@ens6.service 2>/dev/null || true
+sudo systemctl disable --now refresh-policy-routes@ens5.timer refresh-policy-routes@ens6.timer 2>/dev/null || true
+
+sudo rm -f /run/systemd/network/70-ens*.network.d/ec2net_alias.conf
+sudo networkctl reload 2>/dev/null || true
+for iface in $(ip -o link show | awk -F: '/ens/{print $2}' | tr -d ' '); do
+  ip -4 addr show dev "$iface" scope global | grep '/32' | awk '{print $2}' | while read addr; do
+    sudo ip addr del "$addr" dev "$iface" 2>/dev/null || true
+  done
+done
+ip rule show | grep "proto static" | while read line; do
+  prio=$(echo "$line" | cut -d: -f1)
+  rule=$(echo "$line" | sed "s/^[0-9]*:\t//")
+  sudo ip rule del priority "$prio" $rule 2>/dev/null || true
+done
+sudo ip route flush cache 2>/dev/null || true
+echo "✓ ec2-net-utils policy-routes disabled"
+
 # Ensure EC2 API is reachable — IPAMD calls DescribeNetworkInterfaces on startup.
 echo "Waiting for EC2 API reachability..."
 for i in $(seq 1 15); do
