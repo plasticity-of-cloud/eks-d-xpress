@@ -29,12 +29,12 @@ echo "✓ ec2-net-utils policy-routes disabled"
 
 # Ensure EC2 API is reachable — IPAMD calls DescribeNetworkInterfaces on startup.
 echo "Waiting for EC2 API reachability..."
-for i in $(seq 1 15); do
+for i in $(seq 1 5); do
   curl -s --connect-timeout 2 "https://ec2.${AWS_REGION}.amazonaws.com" >/dev/null 2>&1 && {
     echo "✓ EC2 API reachable (${AWS_REGION})"
     break
   }
-  [ "$i" -eq 15 ] && echo "Warning: EC2 API not confirmed after 15s, proceeding anyway"
+  [ "$i" -eq 5 ] && echo "Warning: EC2 API not confirmed after 5s, proceeding anyway"
   sleep 1
 done
 
