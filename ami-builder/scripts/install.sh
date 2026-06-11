@@ -305,11 +305,19 @@ echo "✓ VPC CNI manifest patched (ENABLE_PREFIX_DELEGATION=true, WARM_PREFIX_T
 echo "==> Pre-baking CNI binaries from aws-k8s-cni-init..."
 CNI_INIT_IMG=$(grep "image:" /opt/eks-d/manifests/aws-vpc-cni.yaml | grep "cni-init" | head -1 | awk '{print $2}')
 if [ -n "$CNI_INIT_IMG" ]; then
+  # Authenticate to ECR — CNI images live in 602401143452.dkr.ecr.us-west-2 regardless of instance region
+  CNI_REGISTRY=$(echo "$CNI_INIT_IMG" | cut -d/ -f1)
+  CNI_ECR_REGION=$(echo "$CNI_REGISTRY" | grep -oP '(?<=\.ecr\.)[^.]+(?=\.amazonaws)')
+  CNI_ECR_REGION="${CNI_ECR_REGION:-us-west-2}"
+  aws ecr get-login-password --region "$CNI_ECR_REGION" 2>/dev/null | \
+    docker login --username AWS --password-stdin "$CNI_REGISTRY" 2>/dev/null || true
   sudo mkdir -p /opt/cni/bin
-  docker create --name cni-prebake "$CNI_INIT_IMG" 2>/dev/null && \
+  docker pull "$CNI_INIT_IMG" && \
+  docker create --name cni-prebake "$CNI_INIT_IMG" && \
     sudo docker cp cni-prebake:/opt/cni/bin/. /opt/cni/bin/ && \
-    docker rm cni-prebake || docker rm -f cni-prebake 2>/dev/null || true
-  echo "✓ CNI binaries baked to /opt/cni/bin ($(ls /opt/cni/bin | wc -l) files)"
+    docker rm cni-prebake && \
+    echo "✓ CNI binaries baked to /opt/cni/bin ($(ls /opt/cni/bin | wc -l) files)" || \
+    { docker rm -f cni-prebake 2>/dev/null; echo "Warning: CNI pre-bake failed — will extract at boot"; }
 else
   echo "Warning: could not determine CNI init image — /opt/cni/bin not pre-baked"
 fi
