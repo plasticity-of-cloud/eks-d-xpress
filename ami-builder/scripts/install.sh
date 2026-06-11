@@ -268,23 +268,35 @@ sudo mkdir -p /opt/eks-d/manifests
 sudo curl -sL "https://raw.githubusercontent.com/aws/amazon-vpc-cni-k8s/v1.20.4/config/master/aws-k8s-cni.yaml" \
   -o /opt/eks-d/manifests/aws-vpc-cni.yaml
 
-# Tune IPAMD warm pool for single-node workstation: reduces cold-start from ~30s to ~2s.
-# WARM_ENI_TARGET=0 — don't pre-allocate a full spare ENI
-# WARM_IP_TARGET=1  — keep only 1 spare IP ready
-# MINIMUM_IP_TARGET=1 — floor of 1 IP; IPAMD declares healthy as soon as this is met
+# Enable prefix delegation for fast pod scheduling at boot.
+# One EC2 API call assigns a /28 prefix (16 IPs) to the ENI — all system pods
+# (cert-manager, EBS CSI, CoreDNS, etc.) get IPs immediately without hitting
+# the reactive scale-up loop (~5-15s per IP).
+#
+# CRITICAL: WARM_IP_TARGET and MINIMUM_IP_TARGET override WARM_PREFIX_TARGET
+# when both are set (AWS VPC CNI docs). They must be absent for prefix delegation
+# to work. WARM_ENI_TARGET is also disabled — prefix mode only needs one ENI.
 python3 - /opt/eks-d/manifests/aws-vpc-cni.yaml <<'PYEOF'
 import sys, re
 content = open(sys.argv[1]).read()
-content = re.sub(r'(- name: WARM_ENI_TARGET\s*\n\s*value:) "1"', r'\1 "0"', content)
+
+# Remove any existing WARM_IP_TARGET / MINIMUM_IP_TARGET env entries (they override prefix targets)
+content = re.sub(r'\s*- name: WARM_IP_TARGET\n\s+value: "[^"]*"', '', content)
+content = re.sub(r'\s*- name: MINIMUM_IP_TARGET\n\s+value: "[^"]*"', '', content)
+
+# Set WARM_ENI_TARGET=0 (prefix mode only needs one ENI)
+content = re.sub(r'(- name: WARM_ENI_TARGET\s*\n\s*value:) "[^"]*"', r'\1 "0"', content)
+
+# Inject prefix delegation env vars before WARM_ENI_TARGET
 content = re.sub(
     r'(- name: WARM_ENI_TARGET\n\s+value: "0")',
-    '- name: WARM_IP_TARGET\n              value: "1"\n            - name: MINIMUM_IP_TARGET\n              value: "1"\n            \\1',
+    '- name: ENABLE_PREFIX_DELEGATION\n              value: "true"\n            - name: WARM_PREFIX_TARGET\n              value: "1"\n            \\1',
     content
 )
 open(sys.argv[1], 'w').write(content)
 PYEOF
 sudo chown root:root /opt/eks-d/manifests/aws-vpc-cni.yaml
-echo "✓ VPC CNI manifest patched (WARM_IP_TARGET=1, MINIMUM_IP_TARGET=1, WARM_ENI_TARGET=0)"
+echo "✓ VPC CNI manifest patched (ENABLE_PREFIX_DELEGATION=true, WARM_PREFIX_TARGET=1, WARM_ENI_TARGET=0)"
 
 # Note: CoreDNS is installed automatically by kubeadm init — no separate manifest needed
 
