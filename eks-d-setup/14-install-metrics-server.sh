@@ -175,8 +175,8 @@ spec:
             path: /readyz
             port: https
             scheme: HTTPS
-          initialDelaySeconds: 20
-          periodSeconds: 10
+          initialDelaySeconds: 3
+          periodSeconds: 5
         resources:
           requests:
             cpu: 100m
