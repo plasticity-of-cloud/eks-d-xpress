@@ -61,7 +61,7 @@ SUBNET_ID=$(aws ec2 describe-subnets \
   --query 'Subnets[0].SubnetId' --output text --region "$REGION")
 
 SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
-  --filters "Name=group-name,Values=${TENANT_ID}-eks-dx-${ARCH}" \
+  --filters "Name=group-name,Values=${TENANT_ID}-eks-d-xpress" \
   --query 'SecurityGroups[0].GroupId' --output text --region "$REGION")
 
 # Discover cluster details
@@ -76,6 +76,9 @@ import ipaddress, sys
 net = ipaddress.ip_network('${SERVICE_CIDR}', strict=False)
 print(str(list(net.hosts())[9]))
 ")
+
+[[ "$SECURITY_GROUP_ID" == "None" || -z "$SECURITY_GROUP_ID" ]] && \
+  { echo "ERROR: Security group '${TENANT_ID}-eks-d-xpress' not found in $REGION"; exit 1; }
 
 echo "  Instance Profile : $INSTANCE_PROFILE"
 echo "  Subnet           : $SUBNET_ID"
