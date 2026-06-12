@@ -117,9 +117,11 @@ kubectl create secret docker-registry ecr-pod-identity-agent \
 log "Installing eks-pod-identity-agent..."
 AGENT_CHART=$(ls "${CHART_DIR}/eks-pod-identity-agent"-*.tgz 2>/dev/null | head -1 || true)
 if [[ -z "$AGENT_CHART" ]]; then
-  warn "eks-pod-identity-agent chart not in CHART_DIR — cloning from GitHub..."
-  git clone --depth=1 https://github.com/aws/eks-pod-identity-agent.git /tmp/eks-pod-identity-agent-src
-  AGENT_CHART="/tmp/eks-pod-identity-agent-src/charts/eks-pod-identity-agent"
+  warn "eks-pod-identity-agent chart not in CHART_DIR — downloading from GitHub..."
+  mkdir -p /tmp/eks-pod-identity-agent
+  curl -sL https://github.com/aws/eks-pod-identity-agent/archive/refs/heads/main.tar.gz | \
+    tar xz --strip-components=2 -C /tmp/eks-pod-identity-agent eks-pod-identity-agent-main/charts/eks-pod-identity-agent
+  AGENT_CHART="/tmp/eks-pod-identity-agent"
 fi
 
 helm upgrade --install eks-pod-identity-agent "$AGENT_CHART" \

@@ -236,11 +236,13 @@ else
 fi
 
 echo "==> Pre-pulling eks-pod-identity-agent chart..."
-git clone --depth=1 https://github.com/aws/eks-pod-identity-agent.git /tmp/eks-pod-identity-agent-repo || true
-if [ -d /tmp/eks-pod-identity-agent-repo/charts/eks-pod-identity-agent ]; then
-  helm package /tmp/eks-pod-identity-agent-repo/charts/eks-pod-identity-agent --destination /tmp || true
+mkdir -p /tmp/eks-pod-identity-agent
+curl -sL https://github.com/aws/eks-pod-identity-agent/archive/refs/heads/main.tar.gz | \
+  tar xz --strip-components=2 -C /tmp/eks-pod-identity-agent eks-pod-identity-agent-main/charts/eks-pod-identity-agent || true
+if [ -f /tmp/eks-pod-identity-agent/Chart.yaml ]; then
+  helm package /tmp/eks-pod-identity-agent --destination /tmp || true
 fi
-rm -rf /tmp/eks-pod-identity-agent-repo
+rm -rf /tmp/eks-pod-identity-agent
 
 echo "==> Pre-pulling Karpenter chart from OCI registry..."
 helm registry logout public.ecr.aws 2>/dev/null || true
