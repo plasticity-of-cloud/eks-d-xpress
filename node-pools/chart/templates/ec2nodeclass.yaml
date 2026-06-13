@@ -4,6 +4,7 @@ metadata:
   name: default
 spec:
   instanceProfile: {{ .Values.instanceProfile | quote }}
+  associatePublicIPAddress: true
 
   # Custom AMI family: skips eks:DescribeCluster CIDR detection (Karpenter v1.10 bug -
   # ResolveClusterCIDR always runs for AL2023 regardless of eksControlPlane=false).

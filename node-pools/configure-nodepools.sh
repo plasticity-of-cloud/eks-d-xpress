@@ -57,7 +57,7 @@ echo "  EKS-Optimized AMI : $AMI_ID (k8s 1.${K8S_MINOR} ${ARCH})"
 INSTANCE_PROFILE="eks-d-xpress-tenant-${TENANT_ID}-instance-role"
 
 SUBNET_ID=$(aws ec2 describe-subnets \
-  --filters "Name=tag:Developer,Values=${TENANT_ID}" "Name=tag:SubnetType,Values=Private" \
+  --filters "Name=tag:Developer,Values=${TENANT_ID}" "Name=tag:SubnetType,Values=Public" \
   --query 'Subnets[0].SubnetId' --output text --region "$REGION")
 
 SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
