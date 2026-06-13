@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-spot-workload
+  labels:
+    app: test-spot-workload
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: test-spot-workload
+  template:
+    metadata:
+      labels:
+        app: test-spot-workload
+    spec:
+      nodeSelector:
+        karpenter.sh/capacity-type: spot
+      containers:
+      - name: nginx
+        image: public.ecr.aws/docker/library/nginx:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              storageClassName: gp3
+              resources:
+                requests:
+                  storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-workload-service
+spec:
+  selector:
+    app: test-spot-workload
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
