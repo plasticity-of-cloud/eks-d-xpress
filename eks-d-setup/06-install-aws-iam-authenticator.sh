@@ -150,6 +150,11 @@ spec:
         - --state-dir=/var/aws-iam-authenticator
         - --generate-kubeconfig=/etc/aws-iam-authenticator/kubeconfig.yaml
         - --kubeconfig-pregenerated=true
+      env:
+        - name: AWS_REGION
+          value: ${AWS_REGION}
+        - name: AWS_DEFAULT_REGION
+          value: ${AWS_REGION}
       volumeMounts:
         - name: config
           mountPath: /etc/aws-iam-authenticator
