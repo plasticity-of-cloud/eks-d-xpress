@@ -3,12 +3,14 @@ package ai.codriverlabs.eksdxpress.packer;
 import software.amazon.awscdk.RemovalPolicy;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;
+import software.amazon.awscdk.services.iam.CfnInstanceProfile;
 import software.amazon.awscdk.services.iam.CfnOIDCProvider;
 import software.amazon.awscdk.services.iam.Effect;
 import software.amazon.awscdk.services.iam.FederatedPrincipal;
 import software.amazon.awscdk.services.iam.ManagedPolicy;
 import software.amazon.awscdk.services.iam.PolicyStatement;
 import software.amazon.awscdk.services.iam.Role;
+import software.amazon.awscdk.services.iam.ServicePrincipal;
 import software.amazon.awscdk.services.kms.Key;
 import software.amazon.awscdk.services.kms.KeySpec;
 import software.amazon.awscdk.services.kms.KeyUsage;
@@ -47,15 +49,46 @@ public class EksDXpressPackerIamStack extends Stack {
         String oidcArn  = oidcProvider.getRef();
         String oidcHost = "token.actions.githubusercontent.com";
 
-        // ── Permissions boundary — caps any role Packer creates ───────────────
-        var packerBoundary = ManagedPolicy.Builder.create(this, "PackerBoundary")
-                .managedPolicyName("eks-d-xpress-packer-boundary")
-                .statements(List.of(PolicyStatement.Builder.create()
-                        .effect(Effect.ALLOW)
-                        .actions(List.of("ec2:Describe*", "ecr:GetAuthorizationToken",
-                                "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"))
-                        .resources(List.of("*"))
-                        .build()))
+        // ── Pre-created instance role for Packer builder EC2 instances ────────
+        // Using a named instance profile avoids iam:CreateRole/DeleteRole entirely.
+        var builderInstanceRole = Role.Builder.create(this, "PackerBuilderInstanceRole")
+                .roleName("eks-d-xpress-packer-builder-instance")
+                .description("Role assumed by EC2 instances launched by Packer")
+                .assumedBy(new ServicePrincipal("ec2.amazonaws.com"))
+                .build();
+
+        builderInstanceRole.addToPolicy(PolicyStatement.Builder.create()
+                .effect(Effect.ALLOW)
+                .actions(List.of("ecr:GetAuthorizationToken"))
+                .resources(List.of("*"))
+                .build());
+
+        builderInstanceRole.addToPolicy(PolicyStatement.Builder.create()
+                .effect(Effect.ALLOW)
+                .actions(List.of(
+                        "ecr:BatchCheckLayerAvailability",
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:BatchGetImage",
+                        "ecr:CreateRepository",
+                        "ecr:BatchImportUpstreamImage"))
+                .resources(List.of("arn:aws:ecr:" + region + ":" + account + ":repository/*"))
+                .build());
+
+        builderInstanceRole.addToPolicy(PolicyStatement.Builder.create()
+                .effect(Effect.ALLOW)
+                .actions(List.of("ssm:GetParameter"))
+                .resources(List.of("arn:aws:ssm:*:" + account + ":parameter/eks-d-xpress/*"))
+                .build());
+
+        builderInstanceRole.addToPolicy(PolicyStatement.Builder.create()
+                .effect(Effect.ALLOW)
+                .actions(List.of("sts:GetCallerIdentity"))
+                .resources(List.of("*"))
+                .build());
+
+        var builderInstanceProfile = CfnInstanceProfile.Builder.create(this, "PackerBuilderInstanceProfile")
+                .instanceProfileName("eks-d-xpress-packer-builder")
+                .roles(List.of(builderInstanceRole.getRoleName()))
                 .build();
 
         // ── Packer CI role ────────────────────────────────────────────────────
@@ -128,33 +161,12 @@ public class EksDXpressPackerIamStack extends Stack {
                         Map.of("ec2:InstanceType", List.of("c6a.large", "c6g.large"))))
                 .build());
 
-        // IAM — instance profile lifecycle scoped to packer* prefix
-        // Note: Packer uses both packer_* (keypair/sg) and packer-* (instance-profile) naming
+        // IAM — CI role only needs to pass the pre-created builder instance role to EC2
         packerRole.addToPolicy(PolicyStatement.Builder.create()
-                .sid("PackerIAMInstanceProfile")
+                .sid("PackerIAMPassRole")
                 .effect(Effect.ALLOW)
-                .actions(List.of(
-                        "iam:PassRole",
-                        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile",
-                        "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile",
-                        "iam:GetInstanceProfile", "iam:GetRole",
-                        "iam:TagInstanceProfile"))
-                .resources(List.of(
-                        "arn:aws:iam::" + account + ":instance-profile/packer*",
-                        "arn:aws:iam::" + account + ":role/packer*"))
-                .build());
-
-        // IAM — role creation gated on permissions boundary to block escalation
-        packerRole.addToPolicy(PolicyStatement.Builder.create()
-                .sid("PackerIAMCreateRole")
-                .effect(Effect.ALLOW)
-                .actions(List.of(
-                        "iam:CreateRole", "iam:DeleteRole",
-                        "iam:PutRolePolicy", "iam:DeleteRolePolicy",
-                        "iam:TagRole"))
-                .resources(List.of("arn:aws:iam::" + account + ":role/packer*"))
-                .conditions(Map.of("StringEquals", Map.of(
-                        "iam:PermissionsBoundary", packerBoundary.getManagedPolicyArn())))
+                .actions(List.of("iam:PassRole", "iam:GetRole"))
+                .resources(List.of(builderInstanceRole.getRoleArn()))
                 .build());
 
         // ECR — pull-through cache auth (needed by install.sh at build time)

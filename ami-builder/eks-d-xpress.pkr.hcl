@@ -38,6 +38,8 @@ source "amazon-ebs" "x86_64" {
   ami_description = "EKS-D-Xpress ${var.kubernetes_version} x86_64 - ${var.ami_version}"
   ssh_username    = "ec2-user"
 
+  iam_instance_profile = "eks-d-xpress-packer-builder"
+
   metadata_options {
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
@@ -64,24 +66,6 @@ source "amazon-ebs" "x86_64" {
     KubernetesVersion = var.kubernetes_version
     ManagedBy         = "Packer"
   }
-
-  temporary_iam_instance_profile_policy_document {
-    Version = "2012-10-17"
-    Statement {
-      Effect   = "Allow"
-      Action   = [
-        "ecr:GetAuthorizationToken",
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:BatchGetImage",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:CreateRepository",
-        "ecr:BatchImportUpstreamImage",
-        "ssm:GetParameter",
-        "sts:GetCallerIdentity",
-      ]
-      Resource = ["*"]
-    }
-  }
 }
 
 source "amazon-ebs" "arm64" {
@@ -103,6 +87,8 @@ source "amazon-ebs" "arm64" {
   ami_name        = "eks-d-xpress-arm64-${var.ami_version}"
   ami_description = "EKS-D-Xpress ${var.kubernetes_version} arm64 - ${var.ami_version}"
   ssh_username    = "ec2-user"
+
+  iam_instance_profile = "eks-d-xpress-packer-builder"
 
   metadata_options {
     http_tokens                 = "required"
@@ -129,24 +115,6 @@ source "amazon-ebs" "arm64" {
     Project           = var.project_name
     KubernetesVersion = var.kubernetes_version
     ManagedBy         = "Packer"
-  }
-
-  temporary_iam_instance_profile_policy_document {
-    Version = "2012-10-17"
-    Statement {
-      Effect   = "Allow"
-      Action   = [
-        "ecr:GetAuthorizationToken",
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:BatchGetImage",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:CreateRepository",
-        "ecr:BatchImportUpstreamImage",
-        "ssm:GetParameter",
-        "sts:GetCallerIdentity",
-      ]
-      Resource = ["*"]
-    }
   }
 }
 

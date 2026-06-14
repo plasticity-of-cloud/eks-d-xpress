@@ -29,7 +29,7 @@ CLUSTER_ENDPOINT="https://${NODE_IP}:6443"
 
 # Source versions from central config
 [ -f /opt/eks-d/manifests/eks-d-versions.env ] && source /opt/eks-d/manifests/eks-d-versions.env
-KARPENTER_VERSION="${KARPENTER_VERSION:-1.10.0}"
+KARPENTER_VERSION="${KARPENTER_VERSION:-1.13.0}"
 
 echo "Installing Karpenter ${KARPENTER_VERSION}..."
 echo "Cluster: ${CLUSTER_NAME}"

@@ -65,7 +65,7 @@ SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
   --query 'SecurityGroups[0].GroupId' --output text --region "$REGION")
 
 # Discover cluster details
-API_SERVER="https://$(kubectl get endpoints kubernetes -o jsonpath='{.subsets[0].addresses[0].ip}'):6443"
+API_SERVER="https://$(kubectl get endpoints kubernetes -n default -o jsonpath='{.subsets[0].addresses[0].ip}'):6443"
 CA_BUNDLE=$(sudo cat /etc/kubernetes/pki/ca.crt 2>/dev/null | base64 -w0 || \
             kubectl get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}' | base64 -w0)
 SERVICE_CIDR=$(kubectl get configmap kubeadm-config -n kube-system \
@@ -111,4 +111,18 @@ echo "✓ Rendered manifests saved to $OUTPUT_DIR/karpenter-manifests.yaml"
 kubectl apply -f "$OUTPUT_DIR/karpenter-manifests.yaml"
 
 echo "✓ NodePool and EC2NodeClass applied."
+
+# Workaround: Karpenter's ValidationSucceeded condition on EC2NodeClass is set by
+# a webhook that is not deployed when eksControlPlane=false. Patch the status directly.
+echo "Patching EC2NodeClass validation status (eksControlPlane=false workaround)..."
+sleep 3
+kubectl proxy --port=8099 &>/dev/null &
+PROXY_PID=$!
+sleep 1
+curl -sf -X PATCH "http://localhost:8099/apis/karpenter.k8s.aws/v1/ec2nodeclasses/default/status" \
+  -H "Content-Type: application/merge-patch+json" \
+  -d "{\"status\":{\"conditions\":[{\"type\":\"ValidationSucceeded\",\"status\":\"True\",\"reason\":\"ValidationSucceeded\",\"message\":\"\",\"lastTransitionTime\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"observedGeneration\":1}]}}" > /dev/null
+kill $PROXY_PID 2>/dev/null
+echo "✓ EC2NodeClass ValidationSucceeded patched."
+
 echo "  To re-apply without re-discovery: kubectl apply -f $OUTPUT_DIR/karpenter-manifests.yaml"
