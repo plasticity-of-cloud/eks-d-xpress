@@ -83,7 +83,7 @@ update_progress "provisioning" "cert-manager installed" 70
 
 # Step 6b2: kubelet CSR auto-approver (replicates EKS node-joining / serving cert approval)
 echo "Step 6b2: Deploying kubelet-csr-approver..."
-bash "${SCRIPT_DIR}/11b-install-approver-policy.sh"
+bash "${SCRIPT_DIR}/11b-install-kubelet-csr-approver.sh"
 update_progress "provisioning" "kubelet-csr-approver deployed" 71
 
 # Step 6c: EKS-DX Pod Identity integration (requires cert-manager for webhook TLS)

@@ -4,8 +4,8 @@
 #   kubernetes.io/kube-apiserver-client-kubelet — node bootstrap / client certs (node joining)
 #   kubernetes.io/kubelet-serving               — kubelet TLS serving certs (metrics-server, etc.)
 #
-# Image: registry.k8s.io/kubectl — injected at deploy time via envsubst or kustomize patch.
-# In this cluster the image is served via ECR pull-through cache (registry-k8s-io prefix).
+# Init container (busybox) copies its /bin applets to EmptyDir at /opt/busybox/.
+# Main container (chainguard kubectl) sources sh/awk/xargs/sleep from /opt/busybox/.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -66,22 +66,37 @@ spec:
           effect: NoSchedule
       nodeSelector:
         node-role.kubernetes.io/control-plane: ""
+      initContainers:
+        - name: copy-busybox
+          image: public.ecr.aws/docker/library/busybox:musl
+          command: ["sh", "-c", "cp /bin/busybox /opt/busybox/busybox"]
+          volumeMounts:
+            - name: kube-bin
+              mountPath: /opt/busybox
       containers:
         - name: approver
           image: KUBECTL_IMAGE_PLACEHOLDER
           command:
-            - /bin/sh
+            - /opt/busybox/busybox
+            - sh
             - -c
             - |
               while true; do
                 kubectl get csr --no-headers 2>/dev/null \
-                  | awk '/Pending/ && /kubernetes\.io\/(kube-apiserver-client-kubelet|kubelet-serving)/ {print $1}' \
-                  | xargs -r kubectl certificate approve 2>/dev/null || true
-                sleep 10
+                  | /opt/busybox/busybox awk '/Pending/ && /kubernetes\.io\/(kube-apiserver-client-kubelet|kubelet-serving)/ {print $1}' \
+                  | /opt/busybox/busybox xargs -r kubectl certificate approve 2>/dev/null || true
+                /opt/busybox/busybox sleep 10
               done
+          volumeMounts:
+            - name: kube-bin
+              mountPath: /opt/busybox
           resources:
             requests:
               cpu: 10m
               memory: 20Mi
             limits:
               memory: 40Mi
+      volumes:
+        - name: kube-bin
+          emptyDir:
+            sizeLimit: 100Mi

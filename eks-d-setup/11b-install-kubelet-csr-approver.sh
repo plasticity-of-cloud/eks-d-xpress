@@ -8,10 +8,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-KUBECTL_IMAGE="registry.k8s.io/kubectl:v1.32.0"
-if [ -n "${ECR_REGISTRY:-}" ]; then
-  KUBECTL_IMAGE="${ECR_REGISTRY}/registry-k8s-io/kubectl:v1.32.0"
-fi
+KUBECTL_IMAGE="public.ecr.aws/chainguard/kubectl:latest"
 
 sed "s|KUBECTL_IMAGE_PLACEHOLDER|${KUBECTL_IMAGE}|" \
   "${SCRIPT_DIR}/manifests/kubelet-csr-approver.yaml" | kubectl apply -f -
