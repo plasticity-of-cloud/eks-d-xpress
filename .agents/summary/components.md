@@ -3,8 +3,8 @@
 ## Core Components
 
 ### Infrastructure Components
-- **Infrastructure**: AWS CDK deploys AWS resources and IAM roles
-- **AMI Building**: Automated AMI creation with Packer and provisioning scripts
+- **CDK Pre-build Setup**: AWS CDK provisions IAM roles, OIDC trust, and instance profiles exclusively to enable GitHub Actions to connect to AWS and trigger Packer AMI builds — CDK is not used for cluster infrastructure
+- **AMI Building**: Automated AMI creation with Packer and provisioning scripts (triggered via GitHub Actions using CDK-provisioned IAM resources)
 - **EKS-D Setup**: Sequential installation scripts for EKS-D deployment
 - **Node Pools**: Karpenter node pool configuration management
 - **Monitoring**: CloudWatch and metrics collection setup
@@ -96,7 +96,9 @@ classDiagram
     
     class CDKStack {
         +createIAMRoles()
-        +attachPolicies()
+        +configureOIDCTrust()
+        +createInstanceProfiles()
+        +note: solely for GitHub→AWS Packer connectivity
     }
     
     AMIBuilder --> EKSDSetup: provides base image

@@ -4,28 +4,28 @@
 
 ```mermaid
 graph TB
-    subgraph "Development/Build Phase"
-        A[Infrastructure Code] --> B[CDK Deploy]
-        C[AMI Builder] --> D[Packer Build]
-        E[CDK IAM Stack] --> F[Deploy IAM Resources]
+    subgraph "Pre-Build Phase (CDK sole purpose)"
+        A[CDK Stack] --> B[IAM Roles / OIDC Trust]
+        B --> C[Instance Profiles]
+        C --> D[GitHub Actions → AWS Connection]
+    end
+    
+    subgraph "AMI Build Phase"
+        D --> E[Packer Triggered via GitHub Actions]
+        E --> F[Golden AMIs]
     end
     
     subgraph "Runtime Deployment"
-        B --> G[AWS Control Plane]
-        D --> H[Golden AMIs]
-        F --> I[IAM Roles/Policies]
-        G --> J[EKS-D Installation]
-        H --> J
-        I --> J
-        J --> K[Kubernetes Cluster]
+        F --> G[EKS-D Installation]
+        G --> H[Kubernetes Cluster]
     end
     
     subgraph "Cluster Components"
-        K --> L[Karpenter]
-        K --> M[AWS VPC CNI]
-        K --> N[EBS CSI Driver]
-        K --> O[CloudWatch Agent]
-        K --> P[Metrics Server]
+        H --> I[Karpenter]
+        H --> J[AWS VPC CNI]
+        H --> K[EBS CSI Driver]
+        H --> L[CloudWatch Agent]
+        H --> M[Metrics Server]
     end
 ```
 
@@ -36,15 +36,16 @@ The system uses a sequential, numbered installation approach:
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant C as CDK
+    participant C as CDK (pre-build only)
+    participant GH as GitHub Actions
     participant P as Packer
     participant I as Installer
     participant K as Kubernetes
     
-    U->>C: cdk deploy
-    C->>U: Infrastructure ready
-    U->>P: Build golden AMI
-    P->>U: AMI ready
+    U->>C: cdk deploy (one-time IAM setup)
+    C->>GH: IAM roles / OIDC trust ready
+    GH->>P: Trigger AMI build (authenticated via CDK-provisioned IAM)
+    P->>GH: AMI ready
     U->>I: Run setup-eks-d.sh
     I->>K: Install components 05-17
     K->>U: Cluster ready (< 3 min)

@@ -27,8 +27,8 @@ eks-d-xpress/
 ## Architecture Overview
 
 The system uses a three-phase approach:
-1. **Infrastructure**: AWS CDK deploys AWS resources and IAM roles
-2. **AMI Building**: Packer creates golden AMIs with pre-installed components  
+1. **CDK Pre-build Setup**: AWS CDK provisions IAM roles, OIDC trust, and instance profiles so GitHub Actions can connect to AWS and run Packer — CDK is not used for cluster infrastructure
+2. **AMI Building**: Packer creates golden AMIs with pre-installed components (triggered from GitHub Actions using the CDK-provisioned IAM resources)
 3. **Cluster Deployment**: Numbered scripts (05-17) install EKS-D sequentially
 
 ### Installation Sequence
@@ -66,7 +66,7 @@ The system uses a three-phase approach:
 ### Non-Standard Patterns
 - **Numbered Scripts**: Installation uses numbered sequence (05-17) vs typical single installer
 - **Golden AMIs**: Heavy use of pre-built AMIs vs runtime provisioning
-- **Java CDK**: Java CDK for both IAM and infrastructure management
+- **Java CDK**: Java CDK solely for pre-build IAM setup enabling Packer to run in AWS from GitHub CI (not for cluster infrastructure)
 - **Progress Functions**: Built-in progress reporting system across scripts
 
 ### Script Organization
@@ -98,7 +98,8 @@ The system uses a three-phase approach:
 - Error handling with exit codes and logging
 
 ### Java (CDK Components)  
-- **`EksDXpressPackerIamStack.java`**: IAM stack for Packer permissions
+- **`EksDXpressPackerIamStack.java`**: IAM stack solely for provisioning infrastructure that allows Packer to execute AMI builds via GitHub Actions (GitHub → AWS connection)
+- CDK is **not** used for cluster infrastructure — its only role is pre-build setup (IAM roles, OIDC trust, instance profiles) enabling Packer to run in AWS from GitHub CI
 - Maven-based build system
 - AWS CDK v2 constructs for infrastructure
 
