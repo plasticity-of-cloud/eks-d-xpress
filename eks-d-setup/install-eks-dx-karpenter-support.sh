@@ -54,40 +54,29 @@ chart_ref() {
   fi
 }
 
-# ── 1. Write eks-dx-config ConfigMap ─────────────────────────────────────────
-log "Writing eks-dx-config ConfigMap..."
-
+# ── 1. Resolve NAT gateway flag ───────────────────────────────────────────────
 NAT_ENABLED=$(aws ssm get-parameter \
   --name "/eks-d-xpress/infra/network/nat-gateway-enabled" \
   --region "${AWS_REGION}" \
   --query Parameter.Value --output text 2>/dev/null || echo "false")
 
-# PUBLIC_SUBNET_ID, PRIVATE_SUBNET_ID, SECURITY_GROUP_ID sourced from cluster.env
 [[ -z "${PUBLIC_SUBNET_ID:-}"   ]] && warn "PUBLIC_SUBNET_ID not set in cluster.env"
 [[ -z "${PRIVATE_SUBNET_ID:-}"  ]] && warn "PRIVATE_SUBNET_ID not set in cluster.env"
 [[ -z "${SECURITY_GROUP_ID:-}"  ]] && warn "SECURITY_GROUP_ID not set in cluster.env"
 
-kubectl create configmap eks-dx-config \
-  -n kube-system \
-  --from-literal=cluster-name="${CLUSTER_NAME}" \
-  --from-literal=tenant-id="${TENANT_ID}" \
-  --from-literal=nat-gateway-enabled="${NAT_ENABLED}" \
-  --from-literal=public-subnet-id="${PUBLIC_SUBNET_ID:-}" \
-  --from-literal=private-subnet-id="${PRIVATE_SUBNET_ID:-}" \
-  --from-literal=security-group-id="${SECURITY_GROUP_ID:-}" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-log "✓ eks-dx-config written"
-log "  cluster-name=${CLUSTER_NAME} tenant-id=${TENANT_ID} nat=${NAT_ENABLED}"
-log "  public-subnet=${PUBLIC_SUBNET_ID:-<unset>} private-subnet=${PRIVATE_SUBNET_ID:-<unset>} sg=${SECURITY_GROUP_ID:-<unset>}"
-
-# ── 2. Install Helm chart ─────────────────────────────────────────────────────
+# ── 2. Install Helm chart (eks-dx-config ConfigMap included in chart) ─────────
 log "Installing eks-dx-karpenter-support..."
 # shellcheck disable=SC2046
 helm upgrade --install eks-dx-karpenter-support $(chart_ref eks-dx-karpenter-support) \
   --namespace kube-system \
+  --set clusterIdentity.clusterName="${CLUSTER_NAME}" \
+  --set clusterIdentity.tenantId="${TENANT_ID}" \
+  --set clusterIdentity.natGatewayEnabled="${NAT_ENABLED}" \
+  --set clusterIdentity.publicSubnetId="${PUBLIC_SUBNET_ID:-}" \
+  --set clusterIdentity.privateSubnetId="${PRIVATE_SUBNET_ID:-}" \
+  --set clusterIdentity.securityGroupId="${SECURITY_GROUP_ID:-}" \
   --wait --timeout=120s
-log "✓ eks-dx-karpenter-support installed"
+log "✓ eks-dx-karpenter-support installed (eks-dx-config ConfigMap included)"
 
 log "eks-dx-karpenter-support installation complete"
 log "  EC2NodeClass amiFamily will be rewritten to Custom automatically"
