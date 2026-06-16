@@ -51,15 +51,22 @@ chart_ref() {
 }
 
 # ── 1. Write eks-dx-config ConfigMap ─────────────────────────────────────────
-# ClusterIdentityService reads cluster-name and tenant-id from this ConfigMap.
+# ClusterIdentityService reads cluster-name, tenant-id, and nat-gateway-enabled from this ConfigMap.
 # apiServerEndpoint, ca.crt, and serviceSubnet are already in standard K8s ConfigMaps.
 log "Writing eks-dx-config ConfigMap..."
+
+NAT_ENABLED=$(aws ssm get-parameter \
+  --name "/eks-d-xpress/infra/network/nat-gateway-enabled" \
+  --region "${AWS_REGION}" \
+  --query Parameter.Value --output text 2>/dev/null || echo "false")
+
 kubectl create configmap eks-dx-config \
   -n kube-system \
   --from-literal=cluster-name="${CLUSTER_NAME}" \
   --from-literal=tenant-id="${TENANT_ID}" \
+  --from-literal=nat-gateway-enabled="${NAT_ENABLED}" \
   --dry-run=client -o yaml | kubectl apply -f -
-log "✓ eks-dx-config written"
+log "✓ eks-dx-config written (nat-gateway-enabled=${NAT_ENABLED})"
 
 # ── 2. Install Helm chart ─────────────────────────────────────────────────────
 log "Installing eks-dx-karpenter-support..."
