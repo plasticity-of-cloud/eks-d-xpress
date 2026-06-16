@@ -100,8 +100,9 @@ public class EksDXpressPackerIamStack extends Stack {
                         oidcArn,
                         Map.of(
                                 "StringEquals", Map.of(oidcHost + ":aud", "sts.amazonaws.com"),
-                                "StringLike",   Map.of(oidcHost + ":sub",
-                                        "repo:" + githubOrg + "/" + githubRepo + ":*")
+                                "StringLike",   Map.of(oidcHost + ":sub", List.of(
+                                        "repo:" + githubOrg + "/" + githubRepo + ":ref:refs/heads/main",
+                                        "repo:" + githubOrg + "/" + githubRepo + ":ref:refs/tags/v*"))
                         ),
                         "sts:AssumeRoleWithWebIdentity"
                 ))

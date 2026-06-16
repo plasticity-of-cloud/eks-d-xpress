@@ -56,6 +56,16 @@ echo "  EKS-Optimized AMI : $AMI_ID (k8s 1.${K8S_MINOR} ${ARCH})"
 # Instance profile follows the naming convention from TenantIamService
 INSTANCE_PROFILE="eks-d-xpress-tenant-${TENANT_ID}-instance-role"
 
+# Check if NAT gateway is available (infra layer publishes this to SSM)
+NAT_ENABLED=$(aws ssm get-parameter \
+  --name "/eks-d-xpress/infra/network/nat-gateway-enabled" \
+  --query Parameter.Value --output text --region "$REGION" 2>/dev/null || echo "false")
+if [ "$NAT_ENABLED" = "true" ]; then
+  ASSOCIATE_PUBLIC_IP="false"
+else
+  ASSOCIATE_PUBLIC_IP="true"
+fi
+
 SUBNET_ID=$(aws ec2 describe-subnets \
   --filters "Name=tag:Developer,Values=${TENANT_ID}" "Name=tag:SubnetType,Values=Public" \
   --query 'Subnets[0].SubnetId' --output text --region "$REGION")
@@ -99,6 +109,7 @@ helm template eks-d-karpenter "${SCRIPT_DIR}/chart" \
   --set instanceProfile="$INSTANCE_PROFILE" \
   --set subnetId="$SUBNET_ID" \
   --set securityGroupId="$SECURITY_GROUP_ID" \
+  --set associatePublicIPAddress="$ASSOCIATE_PUBLIC_IP" \
   --set nodeConfig.apiServerEndpoint="$API_SERVER" \
   --set nodeConfig.certificateAuthority="$CA_BUNDLE" \
   --set nodeConfig.serviceCidr="$SERVICE_CIDR" \

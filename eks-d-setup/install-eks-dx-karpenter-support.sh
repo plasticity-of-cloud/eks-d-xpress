@@ -51,14 +51,17 @@ chart_ref() {
 }
 
 # ── 1. Write eks-dx-config ConfigMap ─────────────────────────────────────────
-# ClusterIdentityService reads cluster-name, tenant-id, and nat-gateway-enabled from this ConfigMap.
-# apiServerEndpoint, ca.crt, and serviceSubnet are already in standard K8s ConfigMaps.
 log "Writing eks-dx-config ConfigMap..."
 
 NAT_ENABLED=$(aws ssm get-parameter \
   --name "/eks-d-xpress/infra/network/nat-gateway-enabled" \
   --region "${AWS_REGION}" \
   --query Parameter.Value --output text 2>/dev/null || echo "false")
+
+# PUBLIC_SUBNET_ID, PRIVATE_SUBNET_ID, SECURITY_GROUP_ID sourced from cluster.env
+[[ -z "${PUBLIC_SUBNET_ID:-}"   ]] && warn "PUBLIC_SUBNET_ID not set in cluster.env"
+[[ -z "${PRIVATE_SUBNET_ID:-}"  ]] && warn "PRIVATE_SUBNET_ID not set in cluster.env"
+[[ -z "${SECURITY_GROUP_ID:-}"  ]] && warn "SECURITY_GROUP_ID not set in cluster.env"
 
 kubectl create configmap eks-dx-config \
   -n kube-system \
@@ -69,7 +72,10 @@ kubectl create configmap eks-dx-config \
   --from-literal=private-subnet-id="${PRIVATE_SUBNET_ID:-}" \
   --from-literal=security-group-id="${SECURITY_GROUP_ID:-}" \
   --dry-run=client -o yaml | kubectl apply -f -
-log "✓ eks-dx-config written (nat-gateway-enabled=${NAT_ENABLED})"
+
+log "✓ eks-dx-config written"
+log "  cluster-name=${CLUSTER_NAME} tenant-id=${TENANT_ID} nat=${NAT_ENABLED}"
+log "  public-subnet=${PUBLIC_SUBNET_ID:-<unset>} private-subnet=${PRIVATE_SUBNET_ID:-<unset>} sg=${SECURITY_GROUP_ID:-<unset>}"
 
 # ── 2. Install Helm chart ─────────────────────────────────────────────────────
 log "Installing eks-dx-karpenter-support..."
