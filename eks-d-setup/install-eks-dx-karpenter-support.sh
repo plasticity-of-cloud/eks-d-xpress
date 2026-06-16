@@ -65,6 +65,8 @@ kubectl create configmap eks-dx-config \
   --from-literal=cluster-name="${CLUSTER_NAME}" \
   --from-literal=tenant-id="${TENANT_ID}" \
   --from-literal=nat-gateway-enabled="${NAT_ENABLED}" \
+  --from-literal=public-subnet-id="${PUBLIC_SUBNET_ID:-}" \
+  --from-literal=private-subnet-id="${PRIVATE_SUBNET_ID:-}" \
   --dry-run=client -o yaml | kubectl apply -f -
 log "✓ eks-dx-config written (nat-gateway-enabled=${NAT_ENABLED})"
 
