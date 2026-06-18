@@ -46,7 +46,7 @@ log "  Version:  ${EKS_DX_CONTROL_PLANE_VERSION}"
 chart_ref() {
   local name="$1"
   local tgz
-  tgz=$(ls "${CHART_DIR}/${name}"-*.tgz 2>/dev/null | head -1 || true)
+  tgz=$(ls "${CHART_DIR}/${name}"-*.tgz "${CHART_DIR}/${name}"-*.tar.gz 2>/dev/null | head -1 || true)
   if [[ -n "$tgz" ]]; then
     echo "$tgz"
   else
