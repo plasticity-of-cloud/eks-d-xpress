@@ -54,6 +54,7 @@ etcd:
 apiServer:
   extraArgs:
     authentication-token-webhook-config-file: /etc/kubernetes/aws-iam-authenticator/kubeconfig.yaml
+    enable-admission-plugins: NodeRestriction,MutatingAdmissionWebhook,ValidatingAdmissionWebhook
   extraVolumes:
     - name: aws-iam-authenticator
       hostPath: /etc/kubernetes/aws-iam-authenticator
