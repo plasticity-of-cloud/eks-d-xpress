@@ -8,7 +8,7 @@ The bundle downloads pre-built release artifacts from GitHub and combines them i
 
 | Stack | Source Repository | Release Artifact | What It Deploys |
 |-------|-------------------|-----------------|-----------------|
-| `EksDxSharedInfraStack` | `eks-d-xpress-infra` | `eks-dx-infra-cdk-{ver}.tar.gz` | VPC, launch templates, ECR cache, S3 endpoint, SSM params |
+| `EksDxSharedInfraStack` | `eks-d-xpress-infra` | `eks-d-xpress-infra-cdk-{ver}.tar.gz` | VPC, launch templates, ECR cache, S3 endpoint, SSM params |
 | `EksDXpressControlPlaneStack` | `eks-d-xpress-control-plane` | `eks-dx-cdk-{ver}.tar.gz` | Lambdas, API Gateway, DynamoDB, Pod Identity |
 | Golden AMIs | `eks-d-xpress` | `ami-manifest.json` | Pre-built machine images per region/arch |
 

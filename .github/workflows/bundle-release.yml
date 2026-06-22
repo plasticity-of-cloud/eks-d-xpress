@@ -70,9 +70,9 @@ jobs:
           VER="${INFRA_VERSION#v}"
           gh release download "${INFRA_VERSION}" \
             --repo plasticity-of-cloud/eks-d-xpress-infra \
-            --pattern "eks-dx-infra-cdk-${VER}.tar.gz" --dir /tmp
+            --pattern "eks-d-xpress-infra-cdk-${VER}.tar.gz" --dir /tmp
           mkdir -p build/infra-cdk-out
-          tar xzf /tmp/eks-dx-infra-cdk-${VER}.tar.gz -C build/infra-cdk-out
+          tar xzf /tmp/eks-d-xpress-infra-cdk-${VER}.tar.gz -C build/infra-cdk-out
 
       - name: Download AMI manifest
         env:
