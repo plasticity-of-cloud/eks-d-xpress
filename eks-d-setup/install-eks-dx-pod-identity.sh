@@ -125,7 +125,7 @@ if [[ -z "$AGENT_CHART" ]]; then
   warn "eks-pod-identity-agent chart not in CHART_DIR — downloading from GitHub..."
   mkdir -p /tmp/eks-pod-identity-agent
   curl -sL https://github.com/aws/eks-pod-identity-agent/archive/refs/heads/main.tar.gz | \
-    tar xz --strip-components=2 -C /tmp/eks-pod-identity-agent eks-pod-identity-agent-main/charts/eks-pod-identity-agent
+    tar xz --strip-components=3 -C /tmp/eks-pod-identity-agent eks-pod-identity-agent-main/charts/eks-pod-identity-agent
   AGENT_CHART="/tmp/eks-pod-identity-agent"
 fi
 

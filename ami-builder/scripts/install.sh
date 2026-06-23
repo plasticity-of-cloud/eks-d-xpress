@@ -242,7 +242,7 @@ fi
 echo "==> Pre-pulling eks-pod-identity-agent chart..."
 mkdir -p /tmp/eks-pod-identity-agent
 curl -sL https://github.com/aws/eks-pod-identity-agent/archive/refs/heads/main.tar.gz | \
-  tar xz --strip-components=2 -C /tmp/eks-pod-identity-agent eks-pod-identity-agent-main/charts/eks-pod-identity-agent || true
+  tar xz --strip-components=3 -C /tmp/eks-pod-identity-agent eks-pod-identity-agent-main/charts/eks-pod-identity-agent || true
 if [ -f /tmp/eks-pod-identity-agent/Chart.yaml ]; then
   helm package /tmp/eks-pod-identity-agent --destination /tmp || true
 fi
