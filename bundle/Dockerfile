@@ -1,6 +1,6 @@
 FROM public.ecr.aws/amazoncorretto/amazoncorretto:25.0.3-al2023-headless
 
-RUN dnf install -y nodejs22 npm unzip tar gzip findutils python3 && dnf clean all
+RUN dnf install -y nodejs22 npm maven unzip tar gzip findutils python3 && dnf clean all
 
 # AWS CLI v2
 RUN curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscli.zip \
@@ -14,9 +14,14 @@ RUN npm install -g aws-cdk \
 
 WORKDIR /opt/eks-dx
 
-# Pre-synthesized CDK cloud assemblies
-COPY infra-cdk-out/ ./infra/cdk.out/
-COPY control-plane-cdk-out/ ./control-plane/cdk.out/
+# Infra: tarball includes pre-synthesized cdk.out + helper scripts
+COPY infra-cdk/ ./
+
+# Control-plane: source only — build and synthesize at image build time
+COPY control-plane-cdk/ ./control-plane/
+RUN cd /opt/eks-dx/control-plane/infra \
+    && mvn package -q -DskipTests \
+    && cdk synth --output /opt/eks-dx/control-plane/cdk.out
 
 # AMI manifest
 COPY ami-manifest.json ./ami-manifest.json

@@ -77,7 +77,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sbom-${{ matrix.k8s_version }}-${{ matrix.arch }}
-          path: ami-builder/sbom-${{ matrix.arch }}-*.spdx.json
+          path: |
+            ami-builder/sbom-${{ matrix.arch }}-*.spdx.json
+            ami-builder/ami-signatures-entries.json
           retention-days: 90
 
       - uses: actions/upload-artifact@v4
@@ -101,6 +103,9 @@ jobs:
       - name: Prepare release scripts
         run: |
           cp eks-d-setup/install-eks-dx-pod-identity.sh install-eks-dx-pod-identity.sh
+          cp ami-builder/scripts/verify-ami.sh verify-ami.sh
+          cp ami-builder/scripts/import-ami.sh import-ami.sh
+          cp ami-builder/eks-d-xpress-ami-signing.pub.pem eks-d-xpress-ami-signing.pub.pem
 
       - name: Merge AMI manifest entries
         run: |
@@ -118,6 +123,18 @@ jobs:
 
           json.dump(manifest, open("ami-manifest.json", "w"), indent=2)
           print(json.dumps(manifest, indent=2))
+
+          # Merge signature entries: keyed by ami_id for O(1) lookup by verifier
+          sig_entries = []
+          for f in glob.glob("sbom-*/ami-signatures-entries.json"):
+              sig_entries.extend(json.load(open(f)))
+          # Also check root if uploaded flat
+          for f in glob.glob("ami-signatures-entries-*.json"):
+              sig_entries.extend(json.load(open(f)))
+
+          signatures = {e["ami_id"]: {k: v for k, v in e.items() if k != "ami_id"}
+                        for e in sig_entries}
+          json.dump(signatures, open("ami-signatures.json", "w"), indent=2)
           EOF
 
       - name: Generate checksums
@@ -128,7 +145,11 @@ jobs:
           files: |
             ecr-credential-provider-*
             ami-manifest.json
+            ami-signatures.json
             install-eks-dx-pod-identity.sh
+            verify-ami.sh
+            import-ami.sh
+            eks-d-xpress-ami-signing.pub.pem
             sbom-*.spdx.json
             checksums.txt
           generate_release_notes: true

@@ -6,22 +6,22 @@ without needing access to our AWS account.
 
 ## Prerequisites
 
-- AWS CLI configured with **read-only** access to SSM in `us-east-1`
-  (`ssm:GetParameter` on `arn:aws:ssm:us-east-1:864899852480:parameter/eks-d-xpress/*`)
 - `openssl` (any modern version)
 - `python3`
+- `ami-signatures.json` from the [GitHub release](https://github.com/plasticity-of-cloud/eks-d-xpress/releases)
 
 ## Verify an AMI
 
 ```bash
-git clone https://github.com/codriverlabs/eks-d-xpress.git
-cd eks-d-xpress
+# Download verification assets from the release
+gh release download v1.0.3 \
+  --repo plasticity-of-cloud/eks-d-xpress \
+  --pattern "verify-ami.sh" \
+  --pattern "ami-signatures.json" \
+  --pattern "eks-d-xpress-ami-signing.pub.pem"
 
-AWS_REGION=us-east-1 ./ami-builder/scripts/verify-ami.sh \
-  --ami-id  <AMI_ID>   \
-  --arch    arm64      \   # or x86_64
-  --k8s     1.35       \
-  --version <VERSION>
+chmod +x verify-ami.sh
+./verify-ami.sh --ami-id <AMI_ID>
 ```
 
 Expected output on success:
@@ -53,10 +53,7 @@ The build pipeline creates a JSON attestation for each AMI:
 }
 ```
 
-This is signed with `RSASSA_PKCS1_V1_5_SHA_256` using a KMS RSA-4096 key.
-The signature is stored in our AWS SSM Parameter Store. The `verify-ami.sh`
-script fetches the signature, reconstructs the attestation, and verifies it
-against `ami-builder/eks-d-xpress-ami-signing.pub.pem`.
+The signature is stored in our AWS SSM Parameter Store (internal) and bundled as `ami-signatures.json` in every release. The `verify-ami.sh` script reads the signature from that file, reconstructs the attestation, and verifies it against `eks-d-xpress-ami-signing.pub.pem`. No AWS credentials are required.
 
 The timestamp is also stamped as a `SigningTimestamp` tag on the AMI itself,
 so you can inspect it independently:

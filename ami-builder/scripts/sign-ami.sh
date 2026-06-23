@@ -26,6 +26,7 @@ import json, sys, subprocess, datetime, tempfile, os, base64
 
 manifest_path, key_arn, ami_version = sys.argv[1], sys.argv[2], sys.argv[3]
 entries = json.load(open(manifest_path))
+sig_entries = []
 
 for e in entries:
     attestation_obj = {
@@ -55,7 +56,7 @@ for e in entries:
     finally:
         os.unlink(tmp)
 
-    # Store signature in SSM alongside the AMI ID
+    # Store signature in SSM (internal use)
     subprocess.run([
         "aws", "ssm", "put-parameter",
         "--region", e["region"],
@@ -63,6 +64,16 @@ for e in entries:
         "--value", sig,
         "--type", "String", "--overwrite",
     ], check=True)
+
+    # Write to local sig entries file for bundling in the release artifact
+    sig_entries.append({
+        "ami_id":             e["ami_id"],
+        "arch":               e["arch"],
+        "kubernetes_version": e["kubernetes_version"],
+        "ami_version":        ami_version,
+        "timestamp":          attestation_obj["timestamp"],
+        "signature":          sig,
+    })
 
     # Tag the AMI so consumers can verify provenance
     subprocess.run([
@@ -75,5 +86,7 @@ for e in entries:
         f"Key=SigningTimestamp,Value={attestation_obj['timestamp']}",
     ], check=True)
 
-    print(f"✓ Signed {e['ami_id']} ({e['arch']}) → SSM /eks-d-xpress/infra/ami/{e['arch']}/{e['kubernetes_version']}/signature")
+    print(f"✓ Signed {e['ami_id']} ({e['arch']}) → SSM + ami-signatures-entries.json")
+
+json.dump(sig_entries, open(os.path.join(os.path.dirname(manifest_path), "ami-signatures-entries.json"), "w"), indent=2)
 PYEOF

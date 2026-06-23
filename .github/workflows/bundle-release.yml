@@ -9,6 +9,9 @@ on:
       infra_version:
         description: 'eks-d-xpress-infra release tag (e.g. v1.0.0)'
         required: true
+      release_version:
+        description: 'eks-d-xpress release tag to pull ami-manifest.json from (e.g. v1.0.3)'
+        required: true
       bundle_tag:
         description: 'Bundle image tag (e.g. v1.0.3)'
         required: true
@@ -44,12 +47,12 @@ jobs:
           VER="${CP_VERSION#v}"
           mkdir -p build/helm
 
-          # CDK cloud assembly
+          # CDK full source
           gh release download "${CP_VERSION}" \
             --repo plasticity-of-cloud/eks-d-xpress-control-plane \
-            --pattern "eks-dx-cdk-${VER}.tar.gz" --dir /tmp
-          mkdir -p build/control-plane-cdk-out
-          tar xzf /tmp/eks-dx-cdk-${VER}.tar.gz -C build/control-plane-cdk-out
+            --pattern "eks-d-xpress-control-plane-${VER}.tar.gz" --dir /tmp
+          mkdir -p build/control-plane-cdk
+          tar xzf /tmp/eks-d-xpress-control-plane-${VER}.tar.gz -C build/control-plane-cdk --strip-components=1
 
           # CLI binary (arch-specific)
           gh release download "${CP_VERSION}" \
@@ -70,17 +73,17 @@ jobs:
           VER="${INFRA_VERSION#v}"
           gh release download "${INFRA_VERSION}" \
             --repo plasticity-of-cloud/eks-d-xpress-infra \
-            --pattern "eks-d-xpress-infra-cdk-${VER}.tar.gz" --dir /tmp
-          mkdir -p build/infra-cdk-out
-          tar xzf /tmp/eks-d-xpress-infra-cdk-${VER}.tar.gz -C build/infra-cdk-out
+            --pattern "eks-d-xpress-infra-${VER}.tar.gz" --dir /tmp
+          mkdir -p build/infra-cdk
+          tar xzf /tmp/eks-d-xpress-infra-${VER}.tar.gz -C build/infra-cdk
 
       - name: Download AMI manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get latest release from this repo
-          gh release download --pattern 'ami-manifest.json' --dir build || \
-            echo '{}' > build/ami-manifest.json
+          gh release download "${{ inputs.release_version }}" \
+            --repo plasticity-of-cloud/eks-d-xpress \
+            --pattern 'ami-manifest.json' --dir build
 
       - name: Stage build context
         run: |
