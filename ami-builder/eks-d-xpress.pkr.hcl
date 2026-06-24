@@ -143,7 +143,7 @@ build {
 
   provisioner "shell" {
     inline = [
-      "chmod +x /tmp/scripts/*.sh",
+      "chmod +x /tmp/scripts/*.sh /tmp/scripts/components/*.sh",
       "export KUBERNETES_VERSION=${var.kubernetes_version}",
       "sudo -E bash /tmp/scripts/install.sh"
     ]

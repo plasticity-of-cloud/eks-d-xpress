@@ -20,7 +20,7 @@ eks-d-xpress/
 ### Key Entry Points
 - **`ami-builder/eks-d-xpress.pkr.hcl`**: Packer configuration for golden AMI
 - **`eks-d-setup/setup-eks-d.sh`**: Master installation orchestrator (~135 lines)
-- **`ami-builder/scripts/install.sh`**: Comprehensive AMI provisioning (~517 lines)
+- **`ami-builder/scripts/install.sh`**: Comprehensive AMI provisioning (~257 lines)
 - **`DEPLOYMENT_GUIDE.md`**: Redirect — see `docs/user-guides/deployment.md`
 - **`COMPONENT_VERSIONS.md`**: Pinned component versions and compatibility
 
