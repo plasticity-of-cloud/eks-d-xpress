@@ -6,7 +6,7 @@
 
 The EKS-D control plane is the Kubernetes control plane running on a dedicated EC2 instance.
 
-**Installation**: `eks-d-setup/06-install-eks-d.sh`
+**Installation**: `eks-d-setup/07-install-eks-d.sh` (via `setup-eks-d.sh` step 3)
 
 **Components**:
 - `kube-apiserver` - REST API server for Kubernetes
@@ -24,9 +24,7 @@ The EKS-D control plane is the Kubernetes control plane running on a dedicated E
 
 Karpenter is an open-source node provisioning project for Kubernetes.
 
-**Installation**: 
-- `karpenter-config/install-karpenter.sh`
-- `eks-d-setup/11-install-karpenter.sh`
+**Installation**: `eks-d-setup/15-install-karpenter.sh` (via `setup-eks-d.sh` step 9)
 
 **Resources**:
 
@@ -38,7 +36,7 @@ metadata:
   name: default
 spec:
   amiFamily: AL2023
-  role: <developer-signum>-eks-d-worker-node-role
+  role: <tenant-id>-eks-d-worker-node-role
   subnetSelectorTerms:
     - id: <private-subnet-id>
   securityGroupSelectorTerms:
@@ -72,63 +70,65 @@ spec:
 
 The VPC Container Network Interface provides pod networking.
 
-**Installation**: `eks-d-setup/07-install-cni.sh`
+**Installation**: `eks-d-setup/08-install-cni.sh` (via `setup-eks-d.sh` step 4)
 
 **Purpose**: Assigns VPC IP addresses to pods
 
 ### CoreDNS
 
-CoreDNS provides DNS service for the cluster.
-
-**Installation**: `eks-d-setup/08-install-coredns.sh`
-
-**Purpose**: Cluster DNS resolution
+CoreDNS provides cluster DNS resolution. It is deployed automatically by `kubeadm init`
+during step 3 (`07-install-eks-d.sh`) — there is no separate install script.
 
 ### EBS CSI Driver
 
 The EBS Container Storage Interface driver enables EBS volume usage.
 
-**Installation**: `eks-d-setup/09-install-ebs-csi.sh`
+**Installation**: `eks-d-setup/13-install-ebs-csi.sh` (via `setup-eks-d.sh` step 7)
 
 **Purpose**: Persistent storage for workloads
 
 ## Supporting Components
 
-| Component | Install Script | Purpose |
+| Component | Where installed | Purpose |
 |-----------|----------------|---------|
-| Docker | `eks-d-setup/02-install-docker.sh` | Container runtime |
-| kubectl | `eks-d-setup/03-install-kubectl.sh` | Kubernetes CLI |
-| Helm | `eks-d-setup/04-install-helm.sh` | Package manager |
-| CloudWatch | `monitoring/cloudwatch-setup.yaml` | Monitoring |
+| containerd | AMI (`ami-builder/scripts/00-configure-containerd.sh`) | Container runtime |
+| Helm | AMI (`ami-builder/scripts/04-install-helm.sh`) | Package manager |
+| kubectl / kubeadm / kubelet | AMI (`ami-builder/scripts/install.sh`) | Kubernetes tooling |
+| CloudWatch agent | `eks-d-setup/16-install-cloudwatch.sh` | Monitoring |
+| cert-manager | `eks-d-setup/11-install-cert-manager.sh` | Certificate management |
+| kubelet-csr-approver | `eks-d-setup/11b-install-kubelet-csr-approver.sh` | CSR automation |
+| Metrics Server | `eks-d-setup/14-install-metrics-server.sh` | Resource metrics |
+
+> Docker, kubectl, and Helm are baked into the AMI — they are not installed at cluster boot time.
 
 ## Component Relationships
 
 ```mermaid
 classDiagram
-    class DeveloperEC2 {
+    class ControlPlaneEC2 {
         +EKS-D Control Plane
         +Karpenter Controller
         +Kubelet
     }
-    
+
     class WorkerNode {
         +Kubelet
         +VPC CNI
     }
-    
+
     class NodePool {
         +EC2NodeClass
         +NodePool spec
     }
-    
+
     class VPC {
         +Private Subnet
         +Security Groups
     }
-    
-    DeveloperEC2 --> VPC: Deploys in
+
+    ControlPlaneEC2 --> VPC: Deploys in
     NodePool --> VPC: Provisions nodes in
-    WorkerNode --> DeveloperEC2: Joins cluster
+    WorkerNode --> ControlPlaneEC2: Joins cluster
     Karpenter --> WorkerNode: Provisions
 ```
 
@@ -136,8 +136,8 @@ classDiagram
 
 | Component | Location |
 |-----------|----------|
-| Installation scripts | `eks-d-setup/` |
-| Karpenter config | `karpenter-config/` |
-| NodePool definitions | `node-pools/` |
-| CloudFormation templates | `infrastructure/` |
-| Monitoring | `monitoring/` |
+| Boot installation orchestrator | `eks-d-setup/setup-eks-d.sh` |
+| Installation scripts (05–18) | `eks-d-setup/` |
+| NodePool / EC2NodeClass definitions | `node-pools/` |
+| AMI build scripts | `ami-builder/scripts/` |
+| Monitoring manifests | `monitoring/` |

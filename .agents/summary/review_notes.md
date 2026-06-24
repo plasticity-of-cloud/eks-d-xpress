@@ -42,7 +42,7 @@
 #### 3. Configuration Management
 **Gap**: Limited configuration options documentation
 **Recommendation**: Expand documentation for:
-- Terraform variable customization
+- CDK context key customization (`cdk.json` / `--context` flags)
 - Kubernetes configuration options
 - Environment-specific settings
 - Security hardening configurations

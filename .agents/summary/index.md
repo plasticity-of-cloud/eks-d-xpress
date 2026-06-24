@@ -59,7 +59,7 @@ This file serves as a knowledge base index for AI assistants working with the EK
 
 ### `data_models.md`
 **Purpose**: Configuration structures, data formats, and version management
-**Content**: Component versions, Terraform structures, Kubernetes resources, progress tracking
+**Content**: Component versions, CDK/CloudFormation structures, Kubernetes resources, progress tracking
 **Use When**: Working with configuration, understanding data formats, or managing versions
 
 ### `workflows.md`

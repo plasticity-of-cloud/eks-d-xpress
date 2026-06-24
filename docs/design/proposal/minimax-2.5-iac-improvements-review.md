@@ -1,5 +1,8 @@
 # Review of minimax-2.5-iac-improvements.md
 
+> ⚠️ **Historical.** Both this review and the document it reviews were written against the
+> Terraform-based architecture. Terraform has since been removed entirely.
+
 **Date:** 2026-05-05  
 **Reviewer:** Chief IaC Architect (second pass)  
 **Verdict:** 8 of 15 items are actionable as-is. 5 contain technical errors that would break the system. 2 are valid but low-value.

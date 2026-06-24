@@ -1,5 +1,9 @@
 # Shared Infrastructure — Terraform to CDK (Java) Migration
 
+> ⚠️ **Historical.** This migration has been completed in the `eks-d-xpress-infra` repository
+> (`EksDxSharedInfraStack`). Terraform is gone. This document is kept for reference.
+> Note: SSM paths below use `/eks-dx/` — the deployed prefix is `/eks-d-xpress/`.
+
 ## Overview
 
 The shared VPC infrastructure currently lives in `terraform/vpc/` and is deployed via

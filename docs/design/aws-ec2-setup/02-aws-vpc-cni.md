@@ -18,7 +18,7 @@ Pods get real VPC IPs. They are routable within the VPC without any encapsulatio
 
 | Requirement | Status in current setup |
 |-------------|------------------------|
-| IAM: `AmazonEKS_CNI_Policy` on instance role | ✓ Attached in Terraform |
+| IAM: `AmazonEKS_CNI_Policy` on instance role | ✓ Attached via CDK infra stack (instance profile) |
 | `hostNetwork: true` on aws-node DaemonSet | ✓ In the upstream manifest |
 | Node reachable to EC2 API endpoint | ✓ Public subnet with internet access |
 | No conflicting pod CIDR IPAM controller | ✗ `--pod-network-cidr` is set — see below |

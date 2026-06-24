@@ -108,23 +108,24 @@ graph LR
 ```mermaid
 sequenceDiagram
     participant Dev as Developer
-    participant CF as CloudFormation
+    participant Bundle as Deployment Bundle
+    participant Lambda as TenantEc2Service (Lambda)
     participant EC2 as EC2 Instance
     participant EKS as EKS-D Control Plane
     participant K as Karpenter
     participant Worker as Worker Node
-    
-    Dev->>CF: Deploy VPC
-    CF-->>Dev: VPC Created
-    
-    Dev->>CF: Deploy Developer Stack
-    CF->>EC2: Launch EC2 with User Data
-    EC2->>EKS: Install EKS-D components
-    EC2->>K: Install Karpenter
-    
-    Dev->>K: Configure NodePools
-    K->>K: Watch for pods
-    
+
+    Dev->>Bundle: docker run deploy --region us-east-1
+    Bundle-->>Dev: EksDxSharedInfraStack + EksDXpressControlPlaneStack deployed
+
+    Dev->>Lambda: eks-dx clusters create
+    Lambda->>EC2: Launch EC2 with user-data (cluster.env pre-seeded)
+    EC2->>EKS: setup-eks-d.sh runs (05→18)
+    EC2->>K: Karpenter installed (step 15)
+
+    Dev->>K: configure-nodepools.sh
+    K->>K: Watch for unscheduled pods
+
     Dev->>EKS: Deploy workload
     EKS->>K: Pod unscheduled
     K->>Worker: Provision Spot instance

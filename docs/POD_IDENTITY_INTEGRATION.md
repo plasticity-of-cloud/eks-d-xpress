@@ -2,18 +2,18 @@
 
 ## Current State
 
-- ✅ `eks-d-setup/14-install-eks-dx-pod-identity.sh` — script exists, handles:
+- ✅ `eks-d-setup/12-install-eks-dx-pod-identity.sh` — script exists, handles:
   - JWKS extraction from running cluster
   - Cluster registration with EKS-DX control plane (`eks-dx register-cluster`)
   - Helm install of `eks-dx-auth-proxy`
   - Helm install of `eks-dx-pod-identity-webhook`
   - Graceful skip if `EKS_DX_ENDPOINT` not set
 
-- ❌ Not wired into `setup-eks-d.sh` boot sequence
+- ✅ Wired into `setup-eks-d.sh` as step 6c (runs after cert-manager, skipped in dev mode
+  when `EKS_DX_ENDPOINT` is not set)
 - ❌ Helm charts not pre-pulled in AMI builder
 - ❌ Container images not pre-pulled in AMI builder
 - ❌ `eks-dx` CLI binary not installed in AMI
-- ❌ No progress reporting integrated
 
 ## AMI Builder Requirements
 

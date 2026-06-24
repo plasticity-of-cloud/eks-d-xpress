@@ -1,5 +1,9 @@
 # Infrastructure: Terraform Configuration
 
+> ⚠️ **Historical.** Terraform has been removed. The issues documented here (IMDSv2 hop
+> limit, security group rules) are now addressed via Launch Templates in `EksDxSharedInfraStack`
+> (CDK, `eks-d-xpress-infra` repo). This document is kept for audit trail only.
+
 ## Problem 1: IMDSv2 hop limit blocks containers
 
 The EC2 instance is configured with IMDSv2 required but no hop limit override:

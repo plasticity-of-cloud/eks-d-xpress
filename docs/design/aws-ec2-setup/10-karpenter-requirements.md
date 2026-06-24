@@ -105,7 +105,7 @@ aws sqs create-queue \
   --tags "kubernetes.io/cluster/<cluster-name>=owned"
 ```
 
-Created by Terraform (`aws_sqs_queue.karpenter_interruption` in `terraform/main.tf`).
+Created by the `EksDxSharedInfraStack` CDK stack (previously Terraform `aws_sqs_queue.karpenter_interruption`).
 
 ## EC2NodeClass Requirements
 

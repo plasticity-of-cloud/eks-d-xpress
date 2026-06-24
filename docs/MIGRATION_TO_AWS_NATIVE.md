@@ -1,5 +1,13 @@
 # Migration Plan: Terraform → AWS-Native (CloudFormation + SSM + Lambda)
 
+> ⚠️ **Historical** — This migration is complete. Terraform has been removed.
+> Packer replaced the Terraform AMI builder; CDK (`EksDxSharedInfraStack` in
+> `eks-d-xpress-infra`) replaced the Terraform VPC stack; Lambda handles tenant
+> lifecycle. This document is kept for context only.
+>
+> Note: SSM path prefixes below use `/eks-dx/` — the actual deployed paths use
+> `/eks-d-xpress/` (see `AMI_PIPELINE_SETUP.md` for current SSM schema).
+
 ## Motivation
 
 - Eliminate Terraform state management (S3 bucket, locking, provider versions)

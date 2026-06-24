@@ -1,5 +1,9 @@
 # Workstation API — Design Document
 
+> ⚠️ **Historical design document.** The Lambda-based provisioner described here has been
+> implemented in the `eks-d-xpress-control-plane` repository (`TenantEc2Service`). References
+> to `terraform/api/` and per-developer Terraform are obsolete — Terraform is no longer used.
+
 ## Overview
 
 Replace per-developer Terraform with a self-service API. A Lambda function behind a private API Gateway provisions EKS-DX workstations from a Launch Template.

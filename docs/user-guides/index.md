@@ -15,7 +15,7 @@ This directory contains user-facing documentation for the EKS-D-Xpress project.
 - [Architecture Overview](../README.md) - High-level project overview
 - [Cost Estimation](../../cost-estimation.md) - Cost analysis
 - [Deployment Guide (Root)](../../DEPLOYMENT_GUIDE.md) - Detailed deployment guide
-- [Security Documentation](../../infrastructure/SECURITY.md) - Security considerations
+- [AMI Pipeline Setup](../AMI_PIPELINE_SETUP.md) - AMI signing and OIDC setup
 
 ## Prerequisites
 

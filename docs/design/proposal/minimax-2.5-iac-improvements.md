@@ -1,5 +1,8 @@
 # IaC Architecture Review: EKS-DX Infrastructure
 
+> ⚠️ **Historical.** This review was written against the Terraform-based architecture.
+> Terraform has since been removed entirely. Content is kept for audit trail only.
+
 **Date:** 2026-05-05  
 **Reviewer:** Chief IaC Architect  
 **Scope:** Terraform (main, vpc, ami-builder) + Shell scripts (deploy, destroy, eks-d-setup, node-pools)

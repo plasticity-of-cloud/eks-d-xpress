@@ -19,9 +19,9 @@ eks-d-xpress/
 
 ### Key Entry Points
 - **`ami-builder/eks-d-xpress.pkr.hcl`**: Packer configuration for golden AMI
-- **`eks-d-setup/setup-eks-d.sh`**: Master installation orchestrator (5,487 LOC)
-- **`ami-builder/scripts/install.sh`**: Comprehensive AMI provisioning (515 LOC)
-- **`DEPLOYMENT_GUIDE.md`**: Step-by-step deployment instructions
+- **`eks-d-setup/setup-eks-d.sh`**: Master installation orchestrator (~135 lines)
+- **`ami-builder/scripts/install.sh`**: Comprehensive AMI provisioning (~517 lines)
+- **`DEPLOYMENT_GUIDE.md`**: Redirect — see `docs/user-guides/deployment.md`
 - **`COMPONENT_VERSIONS.md`**: Pinned component versions and compatibility
 
 ## Architecture Overview
@@ -38,7 +38,8 @@ The system uses a three-phase approach:
 11-install-cert-manager.sh → 11b-install-kubelet-csr-approver.sh → 
 12-install-eks-dx-pod-identity.sh → 13-install-ebs-csi.sh → 
 14-install-metrics-server.sh → 15-install-karpenter.sh → 
-16-install-cloudwatch.sh → 17-monitor-cloudwatch-rollout.sh
+16-install-cloudwatch.sh → 17-monitor-cloudwatch-rollout.sh →
+18-install-eks-dx-karpenter-support.sh
 ```
 
 ## Repo-Specific Tools and Patterns

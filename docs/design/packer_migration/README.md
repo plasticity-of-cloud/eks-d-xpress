@@ -1,5 +1,9 @@
 # Packer Migration Design
 
+> ⚠️ **Historical — completed.** `ami-builder/main.tf` (Terraform) has been replaced by
+> `ami-builder/eks-d-xpress.pkr.hcl` (Packer). This document describes the migration
+> rationale and is kept for reference only.
+
 ## Problem with the current approach
 
 `ami-builder/main.tf` uses Terraform to build AMIs via `null_resource` + SSH

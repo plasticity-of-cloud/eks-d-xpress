@@ -1,5 +1,10 @@
 # EKS-D Single-Node EC2 Setup — Design Documents
 
+> ⚠️ **Historical design documents.** The issues described here have been resolved in the
+> current implementation. References to `install-all.sh` map to the current `setup-eks-d.sh`;
+> Terraform references map to the current CDK infra stack. These documents are kept as an
+> audit trail.
+
 This directory documents the required configuration to make a self-managed EKS-D cluster on EC2
 behave equivalently to an EKS managed cluster.
 
@@ -12,7 +17,7 @@ behave equivalently to an EKS managed cluster.
 | [03-coredns.md](03-coredns.md) | CoreDNS — why the install script is wrong and what to do instead |
 | [04-cloud-provider.md](04-cloud-provider.md) | AWS Cloud Controller Manager — missing from install-all.sh |
 | [05-containerd.md](05-containerd.md) | containerd sandbox image and cgroup driver configuration |
-| [06-infrastructure.md](06-infrastructure.md) | Terraform: IMDSv2 hop limit and security group rules |
+| [06-infrastructure.md](06-infrastructure.md) | IMDSv2 hop limit and security group rules (resolved via CDK) |
 | [07-install-order.md](07-install-order.md) | Corrected installation order and verification checklist |
 | [08-karpenter.md](08-karpenter.md) | Karpenter OCI registry migration — old helm repo is dead |
 
