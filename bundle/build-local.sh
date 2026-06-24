@@ -29,12 +29,15 @@ aws ecr-public get-login-password --region us-east-1 \
 echo "==> Downloading control-plane v${CP_VER}..."
 rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}/helm"
 
+# control-plane tarball has a versioned top-level dir — strip it
 curl -fsSL "${CP_BASE}/eks-d-xpress-control-plane-${CP_VER}.tar.gz" \
   | tar xz -C "${BUILD_DIR}" --strip-components=1 --one-top-level=control-plane-cdk
 
 echo "==> Downloading infra v${INFRA_VER}..."
+# infra tarball has no top-level dir — extract directly
+mkdir -p "${BUILD_DIR}/infra-cdk"
 curl -fsSL "${INFRA_BASE}/eks-d-xpress-infra-${INFRA_VER}.tar.gz" \
-  | tar xz -C "${BUILD_DIR}" --strip-components=1 --one-top-level=infra-cdk
+  | tar xz -C "${BUILD_DIR}/infra-cdk"
 
 echo "==> Downloading eks-dx CLI (${ARCH})..."
 curl -fsSL "${CP_BASE}/eks-dx-cli-${CP_VER}-linux-${ARCH}" \
