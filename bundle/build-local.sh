@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 # Build the EKS-D-Xpress bundle image locally.
-#
-# Expects the following repos to be checked out as siblings of this repo:
-#   ../eks-d-xpress-control-plane
-#   ../eks-d-xpress-infra
+# Downloads release artifacts from GitHub using versions in bundle-versions.env.
 #
 # Usage:
 #   ./bundle/build-local.sh [IMAGE_TAG]
-#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,54 +11,52 @@ ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/.build"
 IMAGE_TAG="${1:-eks-d-xpress-bundle:local}"
 
-CONTROL_PLANE_DIR="${ROOT}/../eks-d-xpress-control-plane"
-INFRA_DIR="${ROOT}/../eks-d-xpress-infra"
+source "${SCRIPT_DIR}/bundle-versions.env"
 
-# ── Validate sibling repos ───────────────────────────────────────────────────
-[ -d "${CONTROL_PLANE_DIR}" ] || { echo "ERROR: ${CONTROL_PLANE_DIR} not found"; exit 1; }
-[ -d "${INFRA_DIR}" ]         || { echo "ERROR: ${INFRA_DIR} not found"; exit 1; }
+CP_VER="${CONTROL_PLANE_VERSION}"
+INFRA_VER="${INFRA_VERSION}"
+ARCH=$(uname -m); [ "${ARCH}" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
+
+CP_BASE="https://github.com/plasticity-of-cloud/eks-d-xpress-control-plane/releases/download/v${CP_VER}"
+INFRA_BASE="https://github.com/plasticity-of-cloud/eks-d-xpress-infra/releases/download/v${INFRA_VER}"
 
 # ── Authenticate to ECR public gallery (required to pull base image) ─────────
 echo "==> Authenticating to ECR public gallery..."
 aws ecr-public get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin public.ecr.aws
 
-# ── Stage build context ──────────────────────────────────────────────────────
-echo "==> Staging build context in ${BUILD_DIR}..."
-rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}/helm"
+# ── Download artifacts ───────────────────────────────────────────────────────
+echo "==> Downloading control-plane v${CP_VER}..."
+rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}/helm"
 
-# Control-plane CDK source
-cp -r "${CONTROL_PLANE_DIR}" "${BUILD_DIR}/control-plane-cdk"
+curl -fsSL "${CP_BASE}/eks-d-xpress-control-plane-${CP_VER}.tar.gz" \
+  | tar xz -C "${BUILD_DIR}" --strip-components=1 --one-top-level=control-plane-cdk
 
-# Infra CDK (pre-synthesized cdk.out expected in the infra repo)
-cp -r "${INFRA_DIR}" "${BUILD_DIR}/infra-cdk"
+echo "==> Downloading infra v${INFRA_VER}..."
+curl -fsSL "${INFRA_BASE}/eks-d-xpress-infra-${INFRA_VER}.tar.gz" \
+  | tar xz -C "${BUILD_DIR}" --strip-components=1 --one-top-level=infra-cdk
 
-# CLI binary (use native arch)
-ARCH=$(uname -m)
-[ "${ARCH}" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
-CLI_BIN=$(find "${CONTROL_PLANE_DIR}" -name "eks-dx-cli*-linux-${ARCH}" 2>/dev/null | head -1)
-if [ -z "${CLI_BIN}" ]; then
-  echo "ERROR: eks-dx-cli binary not found in ${CONTROL_PLANE_DIR}"
-  echo "       Build the control-plane project first or download the release binary."
-  exit 1
-fi
-cp "${CLI_BIN}" "${BUILD_DIR}/eks-dx-cli"
+echo "==> Downloading eks-dx CLI (${ARCH})..."
+curl -fsSL "${CP_BASE}/eks-dx-cli-${CP_VER}-linux-${ARCH}" \
+  -o "${BUILD_DIR}/eks-dx-cli"
+chmod +x "${BUILD_DIR}/eks-dx-cli"
 
-# Helm charts
-find "${CONTROL_PLANE_DIR}" -name "eks-d-xpress-*.tar.gz" -exec cp {} "${BUILD_DIR}/helm/" \; 2>/dev/null || true
+echo "==> Downloading Helm charts..."
+for chart in eks-d-xpress-auth-proxy eks-d-xpress-pod-identity-webhook eks-d-xpress-karpenter-support; do
+  curl -fsSL "${CP_BASE}/${chart}-${CP_VER}.tar.gz" \
+    -o "${BUILD_DIR}/helm/${chart}-${CP_VER}.tar.gz"
+done
 
-# AMI manifest (use latest from this repo, or a stub if not present)
+# AMI manifest from this repo's latest release (or empty stub for local dev)
 if [ -f "${ROOT}/ami-manifest.json" ]; then
   cp "${ROOT}/ami-manifest.json" "${BUILD_DIR}/ami-manifest.json"
 else
   echo '{}' > "${BUILD_DIR}/ami-manifest.json"
-  echo "  Warning: no ami-manifest.json found — using empty stub"
+  echo "  Warning: no ami-manifest.json — using empty stub"
 fi
 
-# Dockerfile + orchestrator
 cp "${SCRIPT_DIR}/Dockerfile" "${BUILD_DIR}/Dockerfile"
-cp "${SCRIPT_DIR}/deploy.sh"   "${BUILD_DIR}/deploy.sh"
+cp "${SCRIPT_DIR}/deploy.sh"  "${BUILD_DIR}/deploy.sh"
 
 # ── Build ────────────────────────────────────────────────────────────────────
 echo "==> Building ${IMAGE_TAG}..."
