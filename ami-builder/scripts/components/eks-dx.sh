@@ -39,6 +39,6 @@ EKS_POD_ID_CTR_USER=$(aws ecr get-authorization-token \
   --query 'authorizationData[0].authorizationToken' --output text | base64 -d)
 sudo ctr -n k8s.io images pull \
   --user "${EKS_POD_ID_CTR_USER}" \
-  "602401143452.dkr.ecr.us-west-2.amazonaws.com/eks/eks-pod-identity-agent:latest" || true
+  "602401143452.dkr.ecr.us-west-2.amazonaws.com/eks/eks-pod-identity-agent:v1.3.10-eksbuild.3" || true
 
 echo "✓ eks-dx ready"

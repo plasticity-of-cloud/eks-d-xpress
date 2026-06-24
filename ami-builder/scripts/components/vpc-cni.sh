@@ -53,28 +53,15 @@ done
 
 echo "  Pre-baking CNI binaries from init container..."
 CNI_INIT_IMG=$(grep "image:" "${MANIFESTS_DIR}/aws-vpc-cni.yaml" | grep "cni-init" | head -1 | awk '{print $2}')
-if [ -n "$CNI_INIT_IMG" ]; then
+if [ -n "$CNI_INIT_IMG" ] && sudo ctr -n k8s.io images check name=="$CNI_INIT_IMG" 2>/dev/null | grep -q "complete"; then
   sudo mkdir -p /opt/cni/bin
-  CTR_SNAPSHOT="cni-prebake-$$"
-  sudo ctr -n k8s.io snapshots prepare "$CTR_SNAPSHOT" \
-    "$(sudo ctr -n k8s.io images list -q name=="$CNI_INIT_IMG" 2>/dev/null | head -1)" 2>/dev/null || true
-  CTR_MNT=$(sudo ctr -n k8s.io snapshots mounts /tmp/cni-mnt-$$ "$CTR_SNAPSHOT" 2>/dev/null | head -1)
-  if [ -n "$CTR_MNT" ]; then
-    sudo mkdir -p /tmp/cni-mnt-$$
-    eval "sudo $CTR_MNT"
-    sudo cp -a /tmp/cni-mnt-$$/opt/cni/bin/. /opt/cni/bin/ 2>/dev/null || true
-    sudo umount /tmp/cni-mnt-$$ 2>/dev/null || true
-    sudo rm -rf /tmp/cni-mnt-$$
-    sudo ctr -n k8s.io snapshots rm "$CTR_SNAPSHOT" 2>/dev/null || true
-  else
-    sudo ctr -n k8s.io run --rm \
-      --mount type=bind,src=/opt/cni/bin,dst=/host/opt/cni/bin,options=rbind:rw \
-      "$CNI_INIT_IMG" "cni-prebake-$$" \
-      sh -c "cp -a /opt/cni/bin/. /host/opt/cni/bin/" 2>/dev/null || true
-  fi
+  sudo ctr -n k8s.io run --rm \
+    --mount type=bind,src=/opt/cni/bin,dst=/host/opt/cni/bin,options=rbind:rw \
+    "$CNI_INIT_IMG" "cni-prebake-$$" \
+    sh -c "cp -a /opt/cni/bin/. /host/opt/cni/bin/" 2>/dev/null || true
   echo "  ✓ CNI binaries baked to /opt/cni/bin ($(ls /opt/cni/bin 2>/dev/null | wc -l) files)"
 else
-  echo "  Warning: could not determine CNI init image — /opt/cni/bin not pre-baked"
+  echo "  Warning: CNI init image not ready — /opt/cni/bin not pre-baked, will extract at boot"
 fi
 
 echo "✓ vpc-cni ready"
