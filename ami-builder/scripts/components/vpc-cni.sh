@@ -38,18 +38,12 @@ PYEOF
 sudo chown root:root "${MANIFESTS_DIR}/aws-vpc-cni.yaml"
 echo "  ✓ Manifest patched (ENABLE_PREFIX_DELEGATION=true, WARM_PREFIX_TARGET=1, WARM_ENI_TARGET=0)"
 
-# VPC CNI images live in a fixed account/region regardless of builder region.
-# get-authorization-token --registry-ids is required to pull from 602401143452
-# (cross-account ECR); get-login-password only works for the caller's own account.
-VPC_CNI_ECR_REGION="us-west-2"
-VPC_CNI_CTR_USER=$(aws ecr get-authorization-token \
-  --registry-ids 602401143452 --region "${VPC_CNI_ECR_REGION}" \
-  --query 'authorizationData[0].authorizationToken' --output text | base64 -d)
-
-echo "  Pulling VPC CNI images (602401143452.dkr.ecr.us-west-2)..."
-python3 "${EXTRACT_IMAGES_PY}" < "${MANIFESTS_DIR}/aws-vpc-cni.yaml" | sort -u | while read img; do
-  sudo ctr -n k8s.io images pull --user "${VPC_CNI_CTR_USER}" "$img" || true
-done
+# VPC CNI images are in 602401143452.dkr.ecr.us-west-2 (AWS-owned account).
+# The Packer builder role's ECR permissions are scoped to this account only —
+# cross-account pulls to 602401143452 are not possible during AMI build.
+# These images are pulled at first boot by the ECR credential provider (instance
+# profile grants cross-account ECR access at runtime). No pre-pull attempted here.
+echo "  Skipping VPC CNI images (602401143452) — pulled at runtime by ECR credential provider"
 
 echo "  Pre-baking CNI binaries from init container..."
 CNI_INIT_IMG=$(grep "image:" "${MANIFESTS_DIR}/aws-vpc-cni.yaml" | grep "cni-init" | head -1 | awk '{print $2}')
