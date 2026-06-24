@@ -2,6 +2,7 @@ AWS_REGION         ?= us-east-1
 KUBERNETES_VERSION ?= 1.35
 AMI_VERSION        ?= $(shell date +%Y%m%d-%H%M)
 ARCH               ?= arm64
+BUILD_TYPE         ?= internal
 
 DIR  := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ROOT := $(abspath $(DIR)/..)
@@ -21,6 +22,7 @@ build: packer-init
 	  -var "aws_region=$(AWS_REGION)" \
 	  -var "kubernetes_version=$(KUBERNETES_VERSION)" \
 	  -var "ami_version=$(AMI_VERSION)" \
+	  -var "build_type=$(BUILD_TYPE)" \
 	  "$(DIR)eks-d-xpress.pkr.hcl"
 
 stage:

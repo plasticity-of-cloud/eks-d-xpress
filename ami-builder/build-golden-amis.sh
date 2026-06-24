@@ -14,6 +14,7 @@ prompt() {
 AWS_REGION="${AWS_REGION:-}"
 KUBERNETES_VERSION="${KUBERNETES_VERSION:-}"
 ARCH="${ARCH:-arm64}"
+BUILD_TYPE="${BUILD_TYPE:-internal}"
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
@@ -23,8 +24,10 @@ echo ""
 prompt AWS_REGION         "AWS region"         "us-east-1"
 prompt KUBERNETES_VERSION "Kubernetes version" "1.35"
 prompt ARCH               "Architecture"       "arm64"
+prompt BUILD_TYPE         "Build type (internal/release)" "internal"
 
 make -C "${SCRIPT_DIR}" ami \
   AWS_REGION="${AWS_REGION}" \
   KUBERNETES_VERSION="${KUBERNETES_VERSION}" \
-  ARCH="${ARCH}"
+  ARCH="${ARCH}" \
+  BUILD_TYPE="${BUILD_TYPE}"

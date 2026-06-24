@@ -169,12 +169,28 @@ ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 ECR_PASSWORD=$(aws ecr get-login-password --region "${REGION}")
 echo "${ECR_PASSWORD}" | helm registry login --username AWS --password-stdin "${ECR_REGISTRY}"
 
+# Registry routing: release builds use upstream directly; internal builds use pull-through cache.
+# Component scripts reference only the variables below — no build-type logic in those scripts.
+BUILD_TYPE="${BUILD_TYPE:-internal}"
+if [[ "${BUILD_TYPE}" == "release" ]]; then
+  PUBLIC_ECR_CACHE="public.ecr.aws"
+  K8S_REGISTRY_CACHE="registry.k8s.io"
+  QUAY_CACHE="quay.io"
+  echo "    Build type: release (direct upstream registries)"
+else
+  PUBLIC_ECR_CACHE="${ECR_REGISTRY}/public-ecr"
+  K8S_REGISTRY_CACHE="${ECR_REGISTRY}/registry-k8s-io"
+  QUAY_CACHE="${ECR_REGISTRY}/quay-io"
+  echo "    Build type: internal (pull-through cache: ${ECR_REGISTRY})"
+fi
+
 # Write shared state for component scripts
 cat > /tmp/ami-build.env <<EOF
+BUILD_TYPE=${BUILD_TYPE}
 ECR_REGISTRY=${ECR_REGISTRY}
-PUBLIC_ECR_CACHE=${ECR_REGISTRY}/public-ecr
-K8S_REGISTRY_CACHE=${ECR_REGISTRY}/registry-k8s-io
-QUAY_CACHE=${ECR_REGISTRY}/quay-io
+PUBLIC_ECR_CACHE=${PUBLIC_ECR_CACHE}
+K8S_REGISTRY_CACHE=${K8S_REGISTRY_CACHE}
+QUAY_CACHE=${QUAY_CACHE}
 ECR_CTR_USER=AWS:${ECR_PASSWORD}
 REGION=${REGION}
 ACCOUNT_ID=${ACCOUNT_ID}
