@@ -17,6 +17,12 @@ variable "project_name" {
   type    = string
   default = "eks-d-xpress-infra"
 }
+variable "build_type" {
+  type    = string
+  default = "internal"
+  # "release"  — direct upstream registries (no pull-through cache); used for GitHub releases
+  # "internal" — pull-through cache in private ECR; used for internal/customer builds
+}
 
 source "amazon-ebs" "x86_64" {
   region        = var.aws_region
@@ -143,8 +149,9 @@ build {
 
   provisioner "shell" {
     inline = [
-      "chmod +x /tmp/scripts/*.sh",
+      "chmod +x /tmp/scripts/*.sh /tmp/scripts/components/*.sh",
       "export KUBERNETES_VERSION=${var.kubernetes_version}",
+      "export BUILD_TYPE=${var.build_type}",
       "sudo -E bash /tmp/scripts/install.sh"
     ]
   }

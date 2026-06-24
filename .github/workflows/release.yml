@@ -62,7 +62,8 @@ jobs:
             AWS_REGION="$AWS_REGION" \
             KUBERNETES_VERSION="${{ matrix.k8s_version }}" \
             AMI_VERSION="$(date +%Y%m%d-%H%M)" \
-            ARCH="${{ matrix.arch }}"
+            ARCH="${{ matrix.arch }}" \
+            BUILD_TYPE="release"
           cp ami-builder/ami-manifest-entries.json \
              ami-manifest-${{ matrix.k8s_version }}-${{ matrix.arch }}.json
 

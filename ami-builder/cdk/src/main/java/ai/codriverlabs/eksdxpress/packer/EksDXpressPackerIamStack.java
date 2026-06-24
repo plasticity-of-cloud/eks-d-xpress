@@ -75,6 +75,19 @@ public class EksDXpressPackerIamStack extends Stack {
                 .resources(List.of("arn:aws:ecr:" + region + ":" + account + ":repository/*"))
                 .build());
 
+        // Allow pulling from AWS-curated ECR repositories in the shared AWS service
+        // account (602401143452). Used for VPC CNI images and eks-pod-identity-agent.
+        // These repositories have resource policies allowing authenticated AWS principals.
+        builderInstanceRole.addToPolicy(PolicyStatement.Builder.create()
+                .sid("PackerPullAWSCuratedECR")
+                .effect(Effect.ALLOW)
+                .actions(List.of(
+                        "ecr:BatchCheckLayerAvailability",
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:BatchGetImage"))
+                .resources(List.of("arn:aws:ecr:*:602401143452:repository/*"))
+                .build());
+
         builderInstanceRole.addToPolicy(PolicyStatement.Builder.create()
                 .effect(Effect.ALLOW)
                 .actions(List.of("ssm:GetParameter"))

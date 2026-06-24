@@ -1,33 +1,28 @@
 #!/bin/bash
 set -e
 
-# EKS-D AMI Installation Script
-# Pre-installs binaries, images, and scripts for fast workstation boot
+# EKS-D AMI Installation Script — orchestrator
+# Pre-installs binaries, images, and scripts for fast workstation boot.
+# Component-specific chart/image pulls live in scripts/components/*.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EKS_D_SETUP_DIR="/tmp/eks-d-setup"
 
-# EKS-D version — passed from build-control-plane-ami.sh via KUBERNETES_VERSION env var
 KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.35}"
 EKS_VERSION="${KUBERNETES_VERSION}"
 
+# ── 1. Version discovery ──────────────────────────────────────────────────────
 echo "==> Discovering EKS-D components for Kubernetes ${EKS_VERSION}..."
-
-# Store configuration for later use
 sudo mkdir -p /opt/eks-d
 echo "EKS_VERSION=${EKS_VERSION}" | sudo tee /opt/eks-d/version.env
-echo "TAGGED_AMIS=eks-dx-${EKS_VERSION}" | sudo tee -a /opt/eks-d/version.env
 
 bash "${SCRIPT_DIR}/discover-eks-d.sh" "$EKS_VERSION" "/opt/eks-d/manifests"
-
-# Load discovered versions
 source /opt/eks-d/manifests/eks-d-versions.env
 echo "==> Using EKS-D ${EKSD_VERSION}-eks-${EKSD_RELEASE}"
 
-# Persist full version info for use by 07-install-eks-d.sh at boot time
 EKSD_DOTTED="${EKS_VERSION}.${EKSD_RELEASE}"
 echo "EKSD_VERSION=${EKSD_DOTTED}" | sudo tee -a /opt/eks-d/version.env
-# Source component versions (single source of truth)
+
 VERSIONS_ENV="${SCRIPT_DIR}/component-versions.env"
 [ -f "$VERSIONS_ENV" ] && source "$VERSIONS_ENV"
 : "${EKS_DX_CONTROL_PLANE_VERSION:?component-versions.env missing or EKS_DX_CONTROL_PLANE_VERSION not set}"
@@ -35,28 +30,30 @@ echo "EKS_DX_CONTROL_PLANE_VERSION=${EKS_DX_CONTROL_PLANE_VERSION}" | sudo tee -
 echo "INSTALL_EKS_DX=${INSTALL_EKS_DX:-false}" | sudo tee -a /opt/eks-d/version.env
 export EKS_DX_CONTROL_PLANE_VERSION INSTALL_EKS_DX
 
-# Pre-install EKS-D binaries (kubeadm, kubelet, kubectl) to avoid downloading at boot
-echo "==> Pre-installing EKS-D binaries..."
+# ── 2. Binary installation ────────────────────────────────────────────────────
+echo "==> Pre-installing EKS-D binaries (kubeadm, kubelet, kubectl)..."
 ARCH=$(uname -m)
 [ "$ARCH" = "aarch64" ] && ARCH="arm64"
 [ "$ARCH" = "x86_64" ] && ARCH="amd64"
 RELEASE_MANIFEST="/opt/eks-d/manifests/eks-d-release.yaml"
-KUBEADM_URL=$(grep "bin/linux/${ARCH}/kubeadm" "$RELEASE_MANIFEST" -B 1 | grep "uri:" | awk '{print $2}')
-KUBELET_URL=$(grep "bin/linux/${ARCH}/kubelet" "$RELEASE_MANIFEST" -B 1 | grep "uri:" | awk '{print $2}')
-KUBECTL_URL=$(grep "bin/linux/${ARCH}/kubectl" "$RELEASE_MANIFEST" -B 1 | grep "uri:" | awk '{print $2}')
-curl -sL "$KUBEADM_URL" -o /tmp/kubeadm
-curl -sL "$KUBELET_URL" -o /tmp/kubelet
-curl -sL "$KUBECTL_URL" -o /tmp/kubectl
-sudo install -o root -g root -m 0755 /tmp/kubeadm /usr/local/bin/kubeadm
-sudo install -o root -g root -m 0755 /tmp/kubelet /usr/local/bin/kubelet
-sudo install -o root -g root -m 0755 /tmp/kubectl /usr/local/bin/kubectl
-rm -f /tmp/kubeadm /tmp/kubelet /tmp/kubectl
-echo "✓ EKS-D binaries installed (kubeadm, kubelet, kubectl)"
+for bin in kubeadm kubelet kubectl; do
+  URL=$(grep "bin/linux/${ARCH}/${bin}" "$RELEASE_MANIFEST" -B 1 | grep "uri:" | awk '{print $2}')
+  curl -sL "$URL" -o "/tmp/${bin}"
+  sudo install -o root -g root -m 0755 "/tmp/${bin}" "/usr/local/bin/${bin}"
+  rm -f "/tmp/${bin}"
+done
+echo "✓ EKS-D binaries installed"
 
 echo "==> Installing ecr-credential-provider..."
 sudo install -o root -g root -m 0755 /tmp/ecr-credential-provider /usr/bin/ecr-credential-provider
 rm -f /tmp/ecr-credential-provider
-echo "✓ ecr-credential-provider installed"
+
+echo "==> Installing syft (${SYFT_VERSION})..."
+curl -sL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_${ARCH}.tar.gz" \
+  -o /tmp/syft.tar.gz
+tar -xzf /tmp/syft.tar.gz -C /tmp syft
+sudo install -o root -g root -m 0755 /tmp/syft /usr/local/bin/syft
+rm -f /tmp/syft.tar.gz /tmp/syft
 
 echo "==> Installing eks-dx CLI..."
 if [[ "${INSTALL_EKS_DX:-false}" == "true" ]]; then
@@ -69,45 +66,7 @@ else
   echo "  Skipping eks-dx CLI (INSTALL_EKS_DX=false)"
 fi
 
-echo "==> Installing syft (SBOM generator)..."
-SYFT_URL="https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_${ARCH}.tar.gz"
-curl -sL "$SYFT_URL" -o /tmp/syft.tar.gz
-tar -xzf /tmp/syft.tar.gz -C /tmp syft
-sudo install -o root -g root -m 0755 /tmp/syft /usr/local/bin/syft
-rm -f /tmp/syft.tar.gz /tmp/syft
-echo "✓ syft ${SYFT_VERSION} installed"
-
-export AMI_BUILD=true
-
-# Set up ECR pull-through cache — resolve account/region early but auth after containerd is installed
-echo "==> Resolving ECR pull-through cache endpoint..."
-
-# Wait for IAM instance profile credentials to be available via IMDS
-ACCOUNT_ID=""
-REGION=""
-set +e
-for i in $(seq 1 12); do
-  ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>&1)
-  echo "${ACCOUNT_ID}" | grep -qE '^[0-9]{12}$' && break
-  sleep 5
-done
-set -e
-if ! echo "${ACCOUNT_ID}" | grep -qE '^[0-9]{12}$'; then
-  echo "ERROR: Could not obtain IAM credentials after 60s" >&2; exit 1
-fi
-REGION=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f4)
-# Fall back to IMDSv2 if region not in ARN
-if [ -z "${REGION}" ] || [ "${REGION}" = "None" ]; then
-  TOKEN=$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" \
-    -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
-  REGION=$(curl -sf -H "X-aws-ec2-metadata-token: ${TOKEN}" \
-    http://169.254.169.254/latest/meta-data/placement/region)
-fi
-ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
-PUBLIC_ECR_CACHE="${ECR_REGISTRY}/public-ecr"
-K8S_REGISTRY_CACHE="${ECR_REGISTRY}/registry-k8s-io"
-echo "    ✓ ECR registry: ${ECR_REGISTRY}"
-
+# ── 3. System configuration ───────────────────────────────────────────────────
 echo "==> Baking kubelet systemd service..."
 sudo mkdir -p /etc/systemd/system/kubelet.service.d
 cat <<'EOF' | sudo tee /etc/systemd/system/kubelet.service
@@ -137,7 +96,6 @@ ExecStart=/usr/local/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $
 EOF
 sudo systemctl daemon-reload
 sudo systemctl enable kubelet
-echo "✓ kubelet service baked and enabled"
 
 echo "==> Baking ECR credential provider config..."
 sudo mkdir -p /etc/kubernetes/credential-provider
@@ -154,7 +112,6 @@ providers:
     defaultCacheDuration: 12h
     apiVersion: credentialprovider.kubelet.k8s.io/v1
 EOF
-echo "✓ ECR credential provider config baked"
 
 echo "==> Baking Kubernetes kernel networking settings..."
 cat <<'EOF' | sudo tee /etc/modules-load.d/k8s.conf
@@ -162,9 +119,7 @@ overlay
 br_netfilter
 nf_conntrack
 EOF
-sudo modprobe overlay
-sudo modprobe br_netfilter
-sudo modprobe nf_conntrack
+sudo modprobe overlay br_netfilter nf_conntrack
 cat <<'EOF' | sudo tee /etc/sysctl.d/99-k8s.conf
 net.ipv4.ip_forward = 1
 net.bridge.bridge-nf-call-iptables = 1
@@ -173,337 +128,139 @@ EOF
 sudo sysctl --system
 
 echo "==> Preventing systemd-networkd from managing ENI secondary IPs..."
-# VPC CNI assigns secondary IPs to ENIs for pod networking via veth pairs.
-# Without this, systemd-networkd's DHCPv4 adds those IPs directly to the host
-# interface, causing routing conflicts that hang CNI at startup.
 sudo mkdir -p /etc/systemd/network/70-ens5.network.d
 cat <<'EOF' | sudo tee /etc/systemd/network/70-ens5.network.d/no-secondary-ips.conf
 [DHCPv4]
 UseAddress=no
 EOF
-echo "✓ systemd-networkd drop-in written (ENI secondary IPs won't be claimed by host)"
 
+# ── 4. Tool installation ──────────────────────────────────────────────────────
 echo "==> Installing base system..."
 bash "${SCRIPT_DIR}/01-install-base.sh"
-
 echo "==> Installing Docker..."
 bash "${SCRIPT_DIR}/02-install-docker.sh"
-
 echo "==> Installing Helm..."
 bash "${SCRIPT_DIR}/04-install-helm.sh"
-
-# Configure containerd with EKS-D pause image (release manifest already downloaded by 06)
 echo "==> Configuring containerd..."
 bash "${SCRIPT_DIR}/00-configure-containerd.sh"
 
-# Authenticate with ECR now that containerd and helm are installed
-echo "==> Authenticating with ECR pull-through cache..."
+# ── 5. ECR authentication → shared env file for component scripts ─────────────
+echo "==> Resolving ECR credentials..."
+ACCOUNT_ID=""
+set +e
+for i in $(seq 1 12); do
+  ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>&1)
+  echo "${ACCOUNT_ID}" | grep -qE '^[0-9]{12}$' && break
+  sleep 5
+done
+set -e
+echo "${ACCOUNT_ID}" | grep -qE '^[0-9]{12}$' || \
+  { echo "ERROR: Could not obtain IAM credentials after 60s" >&2; exit 1; }
+
+REGION=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f4)
+if [ -z "${REGION}" ] || [ "${REGION}" = "None" ]; then
+  TOKEN=$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+  REGION=$(curl -sf -H "X-aws-ec2-metadata-token: ${TOKEN}" \
+    http://169.254.169.254/latest/meta-data/placement/region)
+fi
+
+ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 ECR_PASSWORD=$(aws ecr get-login-password --region "${REGION}")
-
-# ctr needs explicit --user for authenticated pulls
-ECR_CTR_USER="AWS:${ECR_PASSWORD}"
-
-# Authenticate helm with ECR
 echo "${ECR_PASSWORD}" | helm registry login --username AWS --password-stdin "${ECR_REGISTRY}"
 
-# Copy eks-d-setup scripts to AMI for use at boot time
-echo "==> Installing eks-d-setup scripts..."
-sudo mkdir -p /opt/eks-d-setup
+# Registry routing: release builds use upstream directly; internal builds use pull-through cache.
+# Component scripts reference only the variables below — no build-type logic in those scripts.
+BUILD_TYPE="${BUILD_TYPE:-internal}"
+if [[ "${BUILD_TYPE}" == "release" ]]; then
+  PUBLIC_ECR_CACHE="public.ecr.aws"
+  K8S_REGISTRY_CACHE="registry.k8s.io"
+  QUAY_CACHE="quay.io"
+  echo "    Build type: release (direct upstream registries)"
+else
+  PUBLIC_ECR_CACHE="${ECR_REGISTRY}/public-ecr"
+  K8S_REGISTRY_CACHE="${ECR_REGISTRY}/registry-k8s-io"
+  QUAY_CACHE="${ECR_REGISTRY}/quay-io"
+  echo "    Build type: internal (pull-through cache: ${ECR_REGISTRY})"
+fi
+
+# Write shared state for component scripts
+cat > /tmp/ami-build.env <<EOF
+BUILD_TYPE=${BUILD_TYPE}
+ECR_REGISTRY=${ECR_REGISTRY}
+PUBLIC_ECR_CACHE=${PUBLIC_ECR_CACHE}
+K8S_REGISTRY_CACHE=${K8S_REGISTRY_CACHE}
+QUAY_CACHE=${QUAY_CACHE}
+ECR_CTR_USER=AWS:${ECR_PASSWORD}
+REGION=${REGION}
+ACCOUNT_ID=${ACCOUNT_ID}
+INSTALL_EKS_DX=${INSTALL_EKS_DX:-false}
+EKS_DX_CONTROL_PLANE_VERSION=${EKS_DX_CONTROL_PLANE_VERSION}
+GHCR_EKS_D_XPRESS_REGISTRY=${GHCR_EKS_D_XPRESS_REGISTRY:-ghcr.io/plasticity-of-cloud}
+CERT_MANAGER_VERSION=${CERT_MANAGER_VERSION}
+KARPENTER_VERSION=${KARPENTER_VERSION}
+METRICS_SERVER_IMAGE=${METRICS_SERVER_IMAGE:-}
+AWS_IAM_AUTHENTICATOR_IMAGE=${AWS_IAM_AUTHENTICATOR_IMAGE:-}
+EXTRACT_IMAGES_PY=${SCRIPT_DIR}/extract-images.py
+EOF
+
+# ── 6. Stage files ────────────────────────────────────────────────────────────
+echo "==> Staging eks-d-setup scripts..."
+sudo mkdir -p /opt/eks-d-setup/charts
 sudo cp -r "${EKS_D_SETUP_DIR}"/* /opt/eks-d-setup/
 sudo chmod +x /opt/eks-d-setup/*.sh
 
-# Copy node-pools chart and configure-nodepools.sh to AMI
-echo "==> Installing Karpenter node-pools..."
+echo "==> Staging Karpenter node-pools..."
 sudo mkdir -p /opt/eks-d-setup/karpenter
 sudo cp -r /tmp/node-pools/chart /opt/eks-d-setup/karpenter/
 sudo cp /tmp/node-pools/configure-nodepools.sh /opt/eks-d-setup/karpenter/
 sudo chmod +x /opt/eks-d-setup/karpenter/configure-nodepools.sh
-echo "✓ Karpenter node-pools chart and configure-nodepools.sh installed to /opt/eks-d-setup/karpenter/"
 
-# Pre-download Helm charts and manifests FIRST (needed for image discovery)
-sudo mkdir -p /opt/eks-d-setup/charts
-echo "==> Pre-pulling cert-manager chart..."
-helm repo add jetstack https://charts.jetstack.io --force-update
-helm pull jetstack/cert-manager --version "${CERT_MANAGER_VERSION}" --destination /tmp || true
-sudo mv /tmp/cert-manager-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
-
-echo "==> Pre-pulling kubectl image for kubelet-csr-approver..."
-sudo ctr -n k8s.io images pull "${K8S_REGISTRY_CACHE}/kubectl:v1.32.0" --user "${ECR_CTR_USER}" || true
-
-echo "==> Pre-pulling EKS-DX Pod Identity charts..."
-if [[ "${INSTALL_EKS_DX:-false}" == "true" ]]; then
-  helm pull oci://ghcr.io/plasticity-of-cloud/helm/eks-d-xpress-pod-identity-webhook --version "${EKS_DX_CONTROL_PLANE_VERSION}" --destination /tmp || true
-  helm pull oci://ghcr.io/plasticity-of-cloud/helm/eks-d-xpress-auth-proxy --version "${EKS_DX_CONTROL_PLANE_VERSION}" --destination /tmp || true
-  helm pull oci://ghcr.io/plasticity-of-cloud/helm/eks-d-xpress-karpenter-support --version "${EKS_DX_CONTROL_PLANE_VERSION}" --destination /tmp || true
-else
-  echo "  Skipping EKS-DX charts (INSTALL_EKS_DX=false)"
-fi
-
-echo "==> Pre-pulling eks-pod-identity-agent chart..."
-mkdir -p /tmp/eks-pod-identity-agent
-curl -sL https://github.com/aws/eks-pod-identity-agent/archive/refs/heads/main.tar.gz | \
-  tar xz --strip-components=3 -C /tmp/eks-pod-identity-agent eks-pod-identity-agent-main/charts/eks-pod-identity-agent || true
-if [ -f /tmp/eks-pod-identity-agent/Chart.yaml ]; then
-  helm package /tmp/eks-pod-identity-agent --destination /tmp || true
-fi
-rm -rf /tmp/eks-pod-identity-agent
-
-echo "==> Pre-pulling Karpenter chart from OCI registry..."
-helm registry logout public.ecr.aws 2>/dev/null || true
-helm pull oci://public.ecr.aws/karpenter/karpenter --version "1.10.0" --destination /tmp || true
-helm repo add aws-cloud-controller-manager https://kubernetes.github.io/cloud-provider-aws
-helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-helm repo update
-helm pull aws-cloud-controller-manager/aws-cloud-controller-manager --destination /tmp || true
-helm pull aws-ebs-csi-driver/aws-ebs-csi-driver --destination /tmp || true
-sudo mv /tmp/karpenter-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
-sudo mv /tmp/aws-cloud-controller-manager-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
-sudo mv /tmp/aws-ebs-csi-driver-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
-sudo mv /tmp/eks-d-xpress-auth-proxy-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
-sudo mv /tmp/eks-d-xpress-pod-identity-webhook-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
-sudo mv /tmp/eks-d-xpress-karpenter-support-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
-sudo mv /tmp/eks-pod-identity-agent-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
-
-echo "==> Pre-pulling CloudWatch Observability Helm chart..."
-helm repo add aws-observability https://aws-observability.github.io/helm-charts 2>/dev/null || true
-helm repo update
-helm pull aws-observability/amazon-cloudwatch-observability --destination /tmp || true
-sudo mv /tmp/amazon-cloudwatch-observability-*.tgz /opt/eks-d-setup/charts/ 2>/dev/null || true
-
-echo "==> Pre-downloading manifests..."
-sudo mkdir -p /opt/eks-d/manifests
-sudo curl -sL "https://raw.githubusercontent.com/aws/amazon-vpc-cni-k8s/v1.20.4/config/master/aws-k8s-cni.yaml" \
-  -o /opt/eks-d/manifests/aws-vpc-cni.yaml
-
-# Enable prefix delegation for fast pod scheduling at boot.
-# One EC2 API call assigns a /28 prefix (16 IPs) to the ENI — all system pods
-# (cert-manager, EBS CSI, CoreDNS, etc.) get IPs immediately without hitting
-# the reactive scale-up loop (~5-15s per IP).
-#
-# CRITICAL: WARM_IP_TARGET and MINIMUM_IP_TARGET override WARM_PREFIX_TARGET
-# when both are set (AWS VPC CNI docs). They must be absent for prefix delegation
-# to work. WARM_ENI_TARGET is also disabled — prefix mode only needs one ENI.
-python3 - /opt/eks-d/manifests/aws-vpc-cni.yaml <<'PYEOF'
-import sys, yaml
-
-path = sys.argv[1]
-with open(path) as f:
-    docs = list(yaml.safe_load_all(f))
-
-REMOVE_VARS = {"WARM_IP_TARGET", "MINIMUM_IP_TARGET"}
-SET_VARS = {"ENABLE_PREFIX_DELEGATION": "true", "WARM_PREFIX_TARGET": "1", "WARM_ENI_TARGET": "0"}
-
-for doc in docs:
-    if not isinstance(doc, dict) or doc.get("kind") != "DaemonSet":
-        continue
-    for container in doc["spec"]["template"]["spec"].get("containers", []):
-        env = [e for e in container.get("env", []) if e.get("name") not in REMOVE_VARS]
-        seen = set()
-        for e in env:
-            if e.get("name") in SET_VARS:
-                e["value"] = SET_VARS[e["name"]]
-                seen.add(e["name"])
-        env += [{"name": k, "value": v} for k, v in SET_VARS.items() if k not in seen]
-        container["env"] = env
-
-with open(path, "w") as f:
-    yaml.dump_all(docs, f, default_flow_style=False, allow_unicode=True)
-PYEOF
-sudo chown root:root /opt/eks-d/manifests/aws-vpc-cni.yaml
-echo "✓ VPC CNI manifest patched (ENABLE_PREFIX_DELEGATION=true, WARM_PREFIX_TARGET=1, WARM_ENI_TARGET=0)"
-
-# Note: CoreDNS is installed automatically by kubeadm init — no separate manifest needed
-
-# Pre-bake CNI binaries from the VPC CNI init container image so the init
-# container finds them on first boot and skips extraction (~20s saving).
-echo "==> Pre-baking CNI binaries from aws-k8s-cni-init..."
-CNI_INIT_IMG=$(grep "image:" /opt/eks-d/manifests/aws-vpc-cni.yaml | grep "cni-init" | head -1 | awk '{print $2}')
-if [ -n "$CNI_INIT_IMG" ]; then
-  # Authenticate to ECR — CNI images live in 602401143452.dkr.ecr.us-west-2 regardless of instance region
-  CNI_REGISTRY=$(echo "$CNI_INIT_IMG" | cut -d/ -f1)
-  CNI_ECR_REGION=$(echo "$CNI_REGISTRY" | grep -oP '(?<=\.ecr\.)[^.]+(?=\.amazonaws)')
-  CNI_ECR_REGION="${CNI_ECR_REGION:-us-west-2}"
-  ECR_CNI_TOKEN=$(aws ecr get-login-password --region "$CNI_ECR_REGION" 2>/dev/null)
-  sudo mkdir -p /opt/cni/bin
-  if sudo ctr -n k8s.io images pull --user "AWS:${ECR_CNI_TOKEN}" "$CNI_INIT_IMG"; then
-    # Mount a snapshot to extract /opt/cni/bin without running the container
-    CTR_SNAPSHOT="cni-prebake-$$"
-    sudo ctr -n k8s.io snapshots prepare "$CTR_SNAPSHOT" \
-      "$(sudo ctr -n k8s.io images list -q name=="$CNI_INIT_IMG" 2>/dev/null | head -1)" 2>/dev/null || true
-    CTR_MNT=$(sudo ctr -n k8s.io snapshots mounts /tmp/cni-mnt-$$ "$CTR_SNAPSHOT" 2>/dev/null | head -1)
-    if [ -n "$CTR_MNT" ]; then
-      sudo mkdir -p /tmp/cni-mnt-$$
-      eval "sudo $CTR_MNT"
-      sudo cp -a /tmp/cni-mnt-$$/opt/cni/bin/. /opt/cni/bin/ 2>/dev/null || true
-      sudo umount /tmp/cni-mnt-$$ 2>/dev/null || true
-      sudo rm -rf /tmp/cni-mnt-$$
-      sudo ctr -n k8s.io snapshots rm "$CTR_SNAPSHOT" 2>/dev/null || true
-    else
-      # Fallback: run the init container briefly and copy via task
-      sudo ctr -n k8s.io run --rm --mount type=bind,src=/opt/cni/bin,dst=/host/opt/cni/bin,options=rbind:rw \
-        "$CNI_INIT_IMG" cni-prebake-$$ sh -c "cp -a /opt/cni/bin/. /host/opt/cni/bin/" 2>/dev/null || true
-    fi
-    echo "✓ CNI binaries baked to /opt/cni/bin ($(ls /opt/cni/bin | wc -l) files)"
-  else
-    echo "Warning: CNI pre-bake failed — will extract at boot"
-  fi
-else
-  echo "Warning: could not determine CNI init image — /opt/cni/bin not pre-baked"
-fi
-
-# Pre-pull container images by inspecting charts and manifests
-echo "==> Discovering and pre-pulling container images..."
+# ── 7. Component scripts ──────────────────────────────────────────────────────
+export AMI_BUILD=true
 sudo systemctl start containerd
 
-# Pull EKS-D control plane images directly from the downloaded manifest
-echo "==> Pulling EKS-D control plane images..."
-grep "uri: public.ecr.aws/eks-distro/kubernetes/" /opt/eks-d/manifests/eks-d-release.yaml | awk '{print $2}' | sort -u | while read img; do
-  cache_img="${PUBLIC_ECR_CACHE}/${img#public.ecr.aws/}"
-  echo "  Pulling: $cache_img"
-  sudo ctr -n k8s.io images pull --user "${ECR_CTR_USER}" "$cache_img" || true
-done
-grep "uri: public.ecr.aws/eks-distro/etcd-io/" /opt/eks-d/manifests/eks-d-release.yaml | awk '{print $2}' | sort -u | while read img; do
-  cache_img="${PUBLIC_ECR_CACHE}/${img#public.ecr.aws/}"
-  echo "  Pulling: $cache_img"
-  sudo ctr -n k8s.io images pull --user "${ECR_CTR_USER}" "$cache_img" || true
-done
-grep "uri: public.ecr.aws/eks-distro/coredns/" /opt/eks-d/manifests/eks-d-release.yaml | awk '{print $2}' | sort -u | while read img; do
-  cache_img="${PUBLIC_ECR_CACHE}/${img#public.ecr.aws/}"
-  echo "  Pulling: $cache_img"
-  sudo ctr -n k8s.io images pull --user "${ECR_CTR_USER}" "$cache_img" || true
+COMPONENTS_DIR="${SCRIPT_DIR}/components"
+for component in \
+    cert-manager \
+    karpenter \
+    ebs-csi \
+    cloud-provider-aws \
+    vpc-cni \
+    cloudwatch \
+    system-images \
+    eks-dx; do
+  echo "==> Component: ${component}"
+  bash "${COMPONENTS_DIR}/${component}.sh"
 done
 
-# Render Karpenter chart and extract images
-# Pull directly from public.ecr.aws — pull-through cache path for karpenter doesn't exist
-echo "==> Extracting and pulling images from Karpenter chart..."
-KARPENTER_CHART=$(ls /opt/eks-d-setup/charts/karpenter-*.tgz 2>/dev/null | head -1)
-if [ -n "$KARPENTER_CHART" ]; then
-  helm template karpenter "$KARPENTER_CHART" 2>/dev/null | \
-    python3 "${SCRIPT_DIR}/extract-images.py" | grep 'public\.ecr\.aws' | sort -u | while read img; do
-      echo "  Pulling: $img"
-      sudo ctr -n k8s.io images pull "$img" || true
+# ── 8. EKS-D control plane images (from release manifest) ────────────────────
+echo "==> Pulling EKS-D control plane images from release manifest..."
+source /tmp/ami-build.env
+for prefix in kubernetes etcd-io coredns; do
+  grep "uri: public.ecr.aws/eks-distro/${prefix}/" \
+    /opt/eks-d/manifests/eks-d-release.yaml | awk '{print $2}' | sort -u | while read img; do
+      sudo ctr -n k8s.io images pull \
+        --user "${ECR_CTR_USER}" \
+        "$(echo "$img" | sed "s|public.ecr.aws/|${PUBLIC_ECR_CACHE}/|")" || true
     done
-fi
+done
 
-# Render cloud-provider-aws chart and extract images
-# registry.k8s.io images routed through ECR pull-through cache (registry-k8s-io prefix)
-echo "==> Extracting and pulling images from cloud-provider-aws chart..."
-CLOUD_PROVIDER_CHART=$(ls /opt/eks-d-setup/charts/aws-cloud-controller-manager-*.tgz 2>/dev/null | head -1)
-if [ -n "$CLOUD_PROVIDER_CHART" ]; then
-  helm template aws-cloud-controller-manager "$CLOUD_PROVIDER_CHART" 2>/dev/null | \
-    python3 "${SCRIPT_DIR}/extract-images.py" | sort -u | while read img; do
-      cache_img=$(echo "$img" | sed \
-        -e "s|public.ecr.aws/|${PUBLIC_ECR_CACHE}/|" \
-        -e "s|registry.k8s.io/|${K8S_REGISTRY_CACHE}/|")
-      echo "  Pulling: $cache_img"
-      sudo ctr -n k8s.io images pull --user "${ECR_CTR_USER}" "$cache_img" || true
-    done
-fi
-
-# Render EBS CSI chart and extract images
-echo "==> Extracting and pulling images from EBS CSI chart..."
-EBS_CSI_CHART=$(ls /opt/eks-d-setup/charts/aws-ebs-csi-driver-*.tgz 2>/dev/null | head -1)
-if [ -n "$EBS_CSI_CHART" ]; then
-  helm template aws-ebs-csi-driver "$EBS_CSI_CHART" 2>/dev/null | \
-    python3 "${SCRIPT_DIR}/extract-images.py" | grep -Ev 'windows|nvidia|neuron|dcgm-exporter|kubekins-e2e|e2e-test' | sort -u | while read img; do
-      cache_img=$(echo "$img" | sed "s|public.ecr.aws/|${PUBLIC_ECR_CACHE}/|")
-      echo "  Pulling: $cache_img"
-      sudo ctr -n k8s.io images pull --user "${ECR_CTR_USER}" "$cache_img" || true
-    done
-fi
-
-# Extract images from VPC CNI manifest
-# Images are in 602401143452.dkr.ecr.us-west-2 — requires explicit ECR auth for that region
-echo "==> Extracting and pulling images from VPC CNI manifest..."
-if [ -f /opt/eks-d/manifests/aws-vpc-cni.yaml ]; then
-  VPC_CNI_ECR_TOKEN=$(aws ecr get-login-password --region us-west-2)
-  python3 "${SCRIPT_DIR}/extract-images.py" < /opt/eks-d/manifests/aws-vpc-cni.yaml | sort -u | while read img; do
-    echo "  Pulling: $img"
-    sudo ctr -n k8s.io images pull --user "AWS:${VPC_CNI_ECR_TOKEN}" "$img" || true
-  done
-fi
-
-# EBS CSI driver images are extracted and pulled from the chart above
-
-# Pull CSI sidecar images using discovered versions
-if [ -n "$CSI_PROVISIONER_IMAGE" ]; then
-  sudo ctr -n k8s.io images pull "$CSI_PROVISIONER_IMAGE" || true
-fi
-if [ -n "$CSI_ATTACHER_IMAGE" ]; then
-  sudo ctr -n k8s.io images pull "$CSI_ATTACHER_IMAGE" || true
-fi
-if [ -n "$LIVENESSPROBE_IMAGE" ]; then
-  sudo ctr -n k8s.io images pull "$LIVENESSPROBE_IMAGE" || true
-fi
-if [ -n "$CSI_RESIZER_IMAGE" ]; then
-  sudo ctr -n k8s.io images pull "$CSI_RESIZER_IMAGE" || true
-fi
-
-# Metrics Server
-if [ -n "$METRICS_SERVER_IMAGE" ]; then
-  echo "==> Pulling Metrics Server image..."
-  sudo ctr -n k8s.io images pull "$METRICS_SERVER_IMAGE" || true
-fi
-
-# aws-iam-authenticator — runs as static pod for worker node IAM auth
-echo "==> Pulling aws-iam-authenticator image..."
-if [ -n "$AWS_IAM_AUTHENTICATOR_IMAGE" ]; then
-  sudo ctr -n k8s.io images pull "$AWS_IAM_AUTHENTICATOR_IMAGE" || true
-fi
-
-# Render CloudWatch Observability chart and extract images
-echo "==> Extracting and pulling images from CloudWatch Observability chart..."
-CW_CHART=$(ls /opt/eks-d-setup/charts/amazon-cloudwatch-observability-*.tgz 2>/dev/null | head -1)
-if [ -n "$CW_CHART" ]; then
-  helm template amazon-cloudwatch-observability "$CW_CHART" \
-    --set clusterName=build --set region=us-east-1 2>/dev/null | \
-    python3 "${SCRIPT_DIR}/extract-images.py" | grep -Ev 'windows|nvidia|neuron|dcgm-exporter|kubekins-e2e' | sort -u | while read img; do
-      cache_img=$(echo "$img" | sed "s|public.ecr.aws/|${PUBLIC_ECR_CACHE}/|")
-      echo "  Pulling: $cache_img"
-      sudo ctr -n k8s.io images pull --user "${ECR_CTR_USER}" "$cache_img" || true
-    done
-fi
-
-# Render cert-manager chart and extract images (quay.io — via ECR pull-through cache prefix "quay-io")
-echo "==> Extracting and pulling images from cert-manager chart..."
-CERT_MANAGER_CHART=$(ls /opt/eks-d-setup/charts/cert-manager-*.tgz 2>/dev/null | head -1)
-QUAY_CACHE="${ECR_REGISTRY}/quay-io"
-if [ -n "$CERT_MANAGER_CHART" ]; then
-  helm template cert-manager "$CERT_MANAGER_CHART" --set crds.enabled=true 2>/dev/null | \
-    python3 "${SCRIPT_DIR}/extract-images.py" | grep 'quay\.io' | sort -u | while read img; do
-      cache_img=$(echo "$img" | sed "s|quay.io/|${QUAY_CACHE}/|")
-      echo "  Pulling: $cache_img"
-      sudo ctr -n k8s.io images pull --user "${ECR_CTR_USER}" "$cache_img" || true
-    done
-fi
-
-# Pre-pull EKS-DX Pod Identity images
-echo "==> Pulling EKS-DX Pod Identity images..."
-if [[ "${INSTALL_EKS_DX:-false}" == "true" ]]; then
-  sudo ctr -n k8s.io images pull ghcr.io/plasticity-of-cloud/eks-d-xpress-auth-proxy:${EKS_DX_CONTROL_PLANE_VERSION} || true
-  sudo ctr -n k8s.io images pull ghcr.io/plasticity-of-cloud/eks-d-xpress-pod-identity-webhook:${EKS_DX_CONTROL_PLANE_VERSION} || true
-  sudo ctr -n k8s.io images pull 602401143452.dkr.ecr.us-west-2.amazonaws.com/eks/eks-pod-identity-agent:latest || true
-else
-  echo "  Skipping EKS-DX images (INSTALL_EKS_DX=false)"
-fi
-
-# Install eks-dx-boot systemd service (starts cluster bootstrap at multi-user.target)
+# ── 9. Final setup ────────────────────────────────────────────────────────────
 echo "==> Installing eks-dx-boot.service..."
 sudo cp /tmp/scripts/eks-dx-boot.service /etc/systemd/system/eks-dx-boot.service
 sudo systemctl daemon-reload
 sudo systemctl enable eks-dx-boot.service
 
-# Disable swap — kubeadm requires swap off; persists across reboots.
 echo "==> Disabling swap..."
 sudo swapoff -a
-sudo touch /etc/systemd/zram-generator.conf  # empty file disables zram swap
+sudo touch /etc/systemd/zram-generator.conf
 sudo sed -i '/ swap /d' /etc/fstab 2>/dev/null || true
 
-# Clean up helm ECR session — workstations use the ECR credential provider instead
-echo "==> Cleaning up temporary ECR credentials..."
+echo "==> Cleaning up ECR credentials..."
 helm registry logout "${ECR_REGISTRY}" 2>/dev/null || true
+rm -f /tmp/ami-build.env
 
-# Unpack all pulled images into the snapshotter so containerd doesn't do it at runtime
 echo "==> Unpacking images into snapshotter..."
 sudo ctr -n k8s.io images list -q | while read img; do
   sudo ctr -n k8s.io run --rm "$img" "warmup-$(echo "$img" | md5sum | cut -c1-8)" true 2>/dev/null || true
@@ -511,7 +268,6 @@ done
 
 echo ""
 echo "==> AMI build complete!"
-echo "    Scripts installed to /opt/eks-d-setup/"
-echo "    Charts installed to /opt/eks-d-setup/charts/"
-echo "    Manifests installed to /opt/eks-d/manifests/"
-echo "    All images pre-pulled for fast boot."
+echo "    Scripts:   /opt/eks-d-setup/"
+echo "    Charts:    /opt/eks-d-setup/charts/"
+echo "    Manifests: /opt/eks-d/manifests/"
