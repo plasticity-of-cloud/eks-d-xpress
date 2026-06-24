@@ -1,5 +1,9 @@
 # Boot Script Plugin Architecture
 
+> ⚠️ **Design proposal — not yet implemented.** The current `eks-d-setup/` uses flat
+> numbered scripts (05–18) run sequentially by `setup-eks-d.sh`. The `core/` and
+> `addons/` directory structure described below does not exist yet.
+
 ## Overview
 
 The boot sequence is split into two phases:

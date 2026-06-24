@@ -194,14 +194,13 @@ aws cloudwatch put-metric-alarm \
 ```
 
 ### Cost Allocation Tags
-```hcl
-# In Terraform resources
-tags = {
-  Team        = "ECP"
-  Owner       = var.team_member_name
-  Environment = "development"
-  Project     = "eks-d-cluster"
-}
+```bash
+# Tag EC2 instances for cost tracking
+aws ec2 create-tags --resources <instance-id> --tags \
+  Key=Team,Value=ECP \
+  Key=Owner,Value=<team-member> \
+  Key=Environment,Value=development \
+  Key=Project,Value=eks-d-cluster
 ```
 
 ## Use Cases

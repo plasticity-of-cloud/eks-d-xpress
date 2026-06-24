@@ -1,5 +1,9 @@
 # CNI Cold Boot Delay — Root Cause Analysis
 
+> **Status: Fixed.** Option A below was implemented in `07-install-eks-d.sh` — the
+> kube-proxy ClusterIP readiness check runs at the end of kubeadm init, before
+> `08-install-cni.sh` is called.
+
 ## The Problem
 
 On a fresh cold boot, the VPC CNI (`aws-node`) pod takes ~90 seconds to become ready.
@@ -68,7 +72,7 @@ before the aws-node pod starts trying to reach the API server.
 
 ### Option A: Wait for kube-proxy before applying CNI
 
-Add a check in `07-install-cni.sh` that waits for the `kubernetes` service ClusterIP
+Add a check in `08-install-cni.sh` that waits for the `kubernetes` service ClusterIP
 to be routable before applying the CNI manifest:
 
 ```bash

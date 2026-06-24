@@ -22,7 +22,7 @@ Total time: **180s (killed by systemd timeout)** — should be ~90s.
 
 ### 1. ✅ FIXED — EBS CSI node pod wait uses wrong label selector
 
-**File:** `eks-d-setup/10-install-ebs-csi.sh`  
+**File:** `eks-d-setup/13-install-ebs-csi.sh`  
 **Commit:** `6de0235`
 
 **Problem:** Wait used `app.kubernetes.io/component=node` but chart v2.60.1 labels all pods `component=csi-driver`. Instant failure with "no matching resources found".
@@ -31,7 +31,7 @@ Total time: **180s (killed by systemd timeout)** — should be ~90s.
 
 ### 2. ✅ FIXED — EKS-D binaries downloaded at boot (10s wasted)
 
-**Files:** `ami-builder/scripts/install.sh`, `eks-d-setup/06-install-eks-d.sh`  
+**Files:** `ami-builder/scripts/install.sh`, `eks-d-setup/07-install-eks-d.sh`  
 **Commit:** `81ed425`
 
 **Problem:** kubeadm, kubelet, kubectl (~178MB) downloaded from `distro.eks.amazonaws.com` on every boot.
@@ -40,7 +40,7 @@ Total time: **180s (killed by systemd timeout)** — should be ~90s.
 
 ### 3. ✅ FIXED — VPC CNI double rollout (40-50s wasted)
 
-**File:** `eks-d-setup/07-install-cni.sh`  
+**File:** `eks-d-setup/08-install-cni.sh`  
 **Commit:** `c66fa60`
 
 **Problem:** Script applied the CNI manifest, waited for the pod to be ready, then ran `kubectl set env AWS_VPC_K8S_CNI_EXTERNALSNAT=false` — which triggered a full DaemonSet rollout (kill pod, create new pod, wait again). The env var was already set to `false` in the manifest.
