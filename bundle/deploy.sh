@@ -45,13 +45,17 @@ cdk_bootstrap() {
 deploy_infra() {
   echo "==> Deploying EksDxSharedInfraStack"
   cd "${SCRIPT_DIR}/infra"
-  cdk deploy --app cdk.out --all --require-approval never
+  cdk deploy --app cdk.out --all --require-approval never \
+    --region "${REGION}" \
+    --context region="${REGION}"
 }
 
 deploy_control_plane() {
   echo "==> Deploying EksDXpressControlPlaneStack"
   cd "${SCRIPT_DIR}/control-plane"
-  cdk deploy --app cdk.out --all --require-approval never
+  cdk deploy --app cdk.out --all --require-approval never \
+    --region "${REGION}" \
+    --context region="${REGION}"
 }
 
 register_amis() {
@@ -132,11 +136,11 @@ case "$COMMAND" in
   destroy)
     case "$STACK" in
       all)
-        cd "${SCRIPT_DIR}/control-plane" && cdk destroy --app cdk.out --all --force || true
-        cd "${SCRIPT_DIR}/infra" && cdk destroy --app cdk.out --all --force || true
+        cd "${SCRIPT_DIR}/control-plane" && cdk destroy --app cdk.out --all --force --region "${REGION}" || true
+        cd "${SCRIPT_DIR}/infra" && cdk destroy --app cdk.out --all --force --region "${REGION}" || true
         ;;
-      infra)          cd "${SCRIPT_DIR}/infra" && cdk destroy --app cdk.out --all --force ;;
-      control-plane)  cd "${SCRIPT_DIR}/control-plane" && cdk destroy --app cdk.out --all --force ;;
+      infra)          cd "${SCRIPT_DIR}/infra" && cdk destroy --app cdk.out --all --force --region "${REGION}" ;;
+      control-plane)  cd "${SCRIPT_DIR}/control-plane" && cdk destroy --app cdk.out --all --force --region "${REGION}" ;;
       *) echo "Unknown stack: $STACK"; exit 1 ;;
     esac
     echo "✓ Destroy complete"
