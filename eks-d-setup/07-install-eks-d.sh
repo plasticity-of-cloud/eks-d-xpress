@@ -29,6 +29,28 @@ if [ -z "${NODE_IP:-}" ] || [ -z "${POD_SUBNET:-}" ]; then
   exit 1
 fi
 
+# --- Fetch control-plane-managed PKI from Secrets Manager ---
+echo "Fetching PKI material from Secrets Manager..."
+sudo mkdir -p /etc/kubernetes/pki
+
+aws secretsmanager get-secret-value \
+  --secret-id "eks-dx/tenant/${TENANT_ID}/ca-key" \
+  --query SecretString --output text | sudo tee /etc/kubernetes/pki/ca.key > /dev/null
+
+aws secretsmanager get-secret-value \
+  --secret-id "eks-dx/tenant/${TENANT_ID}/ca-crt" \
+  --query SecretString --output text | sudo tee /etc/kubernetes/pki/ca.crt > /dev/null
+
+aws secretsmanager get-secret-value \
+  --secret-id "eks-dx/tenant/${TENANT_ID}/sa-key" \
+  --query SecretString --output text | sudo tee /etc/kubernetes/pki/sa.key > /dev/null
+
+sudo openssl rsa -in /etc/kubernetes/pki/sa.key -pubout -out /etc/kubernetes/pki/sa.pub 2>/dev/null
+
+sudo chmod 600 /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/sa.key
+sudo chmod 644 /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/sa.pub
+echo "✓ PKI material fetched from Secrets Manager"
+
 echo "  k8s tag:    ${EKSD_K8S_TAG}"
 echo "  etcd tag:   ${EKSD_ETCD_TAG}"
 echo "  coredns tag:${EKSD_COREDNS_TAG}"
@@ -55,6 +77,7 @@ apiServer:
   extraArgs:
     authentication-token-webhook-config-file: /etc/kubernetes/aws-iam-authenticator/kubeconfig.yaml
     enable-admission-plugins: NodeRestriction,MutatingAdmissionWebhook,ValidatingAdmissionWebhook
+    service-account-issuer: "https://eks-dx.codriverlabs.ai/clusters/${TENANT_ID}"
   extraVolumes:
     - name: aws-iam-authenticator
       hostPath: /etc/kubernetes/aws-iam-authenticator

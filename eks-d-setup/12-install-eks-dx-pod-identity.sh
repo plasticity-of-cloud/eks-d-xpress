@@ -30,4 +30,4 @@ fi
 export EKS_DX_ENDPOINT CLUSTER_NAME AWS_REGION EKS_DX_CONTROL_PLANE_VERSION
 export CHART_DIR="/opt/eks-d-setup/charts"
 
-exec bash "$CANONICAL_SCRIPT"
+exec bash "$CANONICAL_SCRIPT" --oidc-mode managed
