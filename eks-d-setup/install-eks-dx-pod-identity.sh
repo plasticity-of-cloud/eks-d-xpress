@@ -29,6 +29,15 @@ log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
 
+# ── Parse --oidc-mode flag ─────────────────────────────────────────────────────
+OIDC_MODE="self-managed"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --oidc-mode) OIDC_MODE="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
 # ── Validate required inputs ───────────────────────────────────────────────────
 [[ -z "${CLUSTER_NAME:-}"    ]] && err "CLUSTER_NAME is required"
 [[ -z "${AWS_REGION:-}"      ]] && err "AWS_REGION is required"
@@ -85,23 +94,26 @@ else
   log "✓ cert-manager already present"
 fi
 
-# ── 1. Register cluster ────────────────────────────────────────────────────────
-log "Registering cluster with eks-dx control plane..."
+# ── 1. Register cluster (self-managed only — managed clusters are pre-registered) ──
+if [[ "$OIDC_MODE" == "self-managed" ]]; then
+  log "Registering cluster with eks-dx control plane..."
 
-ISSUER=$(kubectl get --raw /.well-known/openid-configuration 2>/dev/null \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['issuer'])" 2>/dev/null || true)
-[[ -z "$ISSUER" ]] && ISSUER="${EKS_DX_ENDPOINT}/clusters/${CLUSTER_NAME}"
+  ISSUER=$(kubectl get --raw /.well-known/openid-configuration 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['issuer'])" 2>/dev/null || true)
+  [[ -z "$ISSUER" ]] && ISSUER="${EKS_DX_ENDPOINT}/clusters/${CLUSTER_NAME}"
 
-kubectl get --raw /openid/v1/jwks > /tmp/eks-dx-jwks.json
+  kubectl get --raw /openid/v1/jwks > /tmp/eks-dx-jwks.json
 
-eks-dx register-cluster \
-  --name "${CLUSTER_NAME}" \
-  --region "${AWS_REGION}" \
-  --issuer "${ISSUER}" \
-  --jwks-file /tmp/eks-dx-jwks.json || warn "Cluster registration returned non-zero (may already be registered)"
+  eks-dx create-cluster --name "${CLUSTER_NAME}" --oidc-mode self-managed \
+    --region "${AWS_REGION}" \
+    --issuer "${ISSUER}" \
+    --jwks-file /tmp/eks-dx-jwks.json || warn "Cluster registration returned non-zero (may already be registered)"
 
-rm -f /tmp/eks-dx-jwks.json
-log "✓ Cluster registered"
+  rm -f /tmp/eks-dx-jwks.json
+  log "✓ Cluster registered"
+else
+  log "Skipping cluster registration (managed mode — pre-registered by control plane)"
+fi
 
 # ── 2. eks-dx-auth-proxy ──────────────────────────────────────────────────────
 log "Installing eks-dx-auth-proxy..."
