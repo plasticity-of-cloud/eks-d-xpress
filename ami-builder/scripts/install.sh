@@ -28,6 +28,8 @@ VERSIONS_ENV="${SCRIPT_DIR}/component-versions.env"
 : "${EKS_DX_CONTROL_PLANE_VERSION:?component-versions.env missing or EKS_DX_CONTROL_PLANE_VERSION not set}"
 echo "EKS_DX_CONTROL_PLANE_VERSION=${EKS_DX_CONTROL_PLANE_VERSION}" | sudo tee -a /opt/eks-d/version.env
 echo "INSTALL_EKS_DX=${INSTALL_EKS_DX:-false}" | sudo tee -a /opt/eks-d/version.env
+echo "CERT_MANAGER_VERSION=${CERT_MANAGER_VERSION}" | sudo tee -a /opt/eks-d/version.env
+echo "KARPENTER_VERSION=${KARPENTER_VERSION}" | sudo tee -a /opt/eks-d/version.env
 export EKS_DX_CONTROL_PLANE_VERSION INSTALL_EKS_DX
 
 # ── 2. Binary installation ────────────────────────────────────────────────────
